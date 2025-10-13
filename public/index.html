@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Generatore Biglietto da Visita Digitale</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 820px; margin: 24px auto; padding: 0 16px; }
+    label { display:block; margin: 12px 0 4px; }
+    input, button { width:100%; padding:10px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .actions { margin-top:16px; display:flex; gap:12px; flex-wrap: wrap; }
+    .card { border:1px solid #e5e5e5; border-radius:12px; padding:16px; margin-top:24px; }
+    img { max-width:100%; }
+    .hint { color:#666; font-size: 14px; }
+    .ok { color:#0a7f2e; }
+    .err { color:#b00020; }
+    a.button, button { background:#111; color:#fff; border:none; border-radius:8px; text-decoration:none; text-align:center; }
+    a.button { padding:10px 14px; display:inline-block; }
+  </style>
+</head>
+<body>
+  <h1>Genera biglietto da visita</h1>
+  <div class="hint">Compila i campi e premi “Genera”. Otterrai i pulsanti per aggiungere il pass su iPhone e Android.</div>
+  <form id="cardForm" class="card">
+    <label>Nome Cognome</label><input name="name" required/>
+    <label>Ruolo</label><input name="role" required/>
+    <label>Azienda</label><input name="company" required/>
+    <div class="row">
+      <div><label>Telefono</label><input name="phone" required/></div>
+      <div><label>Email</label><input name="email" type="email" required/></div>
+    </div>
+    <label>Sito / Link</label><input name="website" placeholder="https://..."/>
+    <label>Colore brand (hex)</label><input name="brandColor" value="#2B2B2B"/>
+    <label>Testo logo (sul pass)</label><input name="logoText" value="Business Card"/>
+    <div class="actions">
+      <button type="submit">Genera</button>
+    </div>
+  </form>
+
+  <div id="result"></div>
+
+  <script>
+    const form = document.getElementById('cardForm');
+    const result = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      result.innerHTML = "<p>Generazione in corso...</p>";
+      const data = Object.fromEntries(new FormData(form).entries());
+      const res = await fetch('/create-pass', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+      });
+      const out = await res.json();
+      if (out.error) {
+        result.innerHTML = "<p class='err'>" + out.error + "</p>";
+      } else {
+        result.innerHTML = `
+          <div class="card">
+            <p class="ok"><strong>Pass generato!</strong></p>
+            <p><strong>QR (anteprima):</strong></p>
+            <img src="${out.qrDataUrl}" alt="QR" style="width:180px;height:180px;"/>
+            <div class="actions">
+              <a class="button" href="${out.iosDownloadUrl}">Aggiungi ad Apple Wallet</a>
+              <a class="button" href="${out.androidSaveUrl}" target="_blank" rel="noopener">Save to Google Wallet</a>
+            </div>
+            <p class="hint">Se il pulsante iOS non apre il Wallet, scarica il file e aprilo con Wallet.</p>
+          </div>
+        `;
+      }
+    });
+  </script>
+</body>
+</html>

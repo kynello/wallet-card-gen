@@ -1,0 +1,22 @@
+{
+  "name": "wallet-card-gen",
+  "version": "1.0.0",
+  "description": "Simple web app to generate Apple Wallet (.pkpass) business cards and Google Wallet save links with QR.",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "google-auth-library": "^9.14.1",
+    "jsonwebtoken": "^9.0.2",
+    "passkit-generator": "^3.1.6",
+    "qrcode": "^1.5.4",
+    "uuid": "^9.0.1"
+  }
+}
