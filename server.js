@@ -152,58 +152,64 @@ app.post('/create-pass', async (req, res) => {
     });
     const qrDataUrl = await QRCode.toDataURL(payload);
 
-    // --- APPLE PASS (.pkpass) ---
-    const pass = new Pass({
-      model: {
-        passTypeIdentifier: APPLE.passTypeIdentifier,
-        teamIdentifier: APPLE.teamIdentifier,
-        sharingProhibited: false,
-        formatVersion: 1,
-        backgroundColor: brandColor,
-        labelColor: '#ffffff',
-        foregroundColor: '#ffffff',
-        description: 'Business Card',
-        logoText: logoText,
-        organizationName: company,
-        serialNumber: uuidv4(),
-        relevantDate: new Date().toISOString(),
-        generic: {
-          primaryFields: [
-            { key: 'name', label: 'NOME', value: name }
-          ],
-          secondaryFields: [
-            { key: 'role', label: 'RUOLO', value: role },
-            { key: 'company', label: 'AZIENDA', value: company }
-          ],
-          auxiliaryFields: [
-            { key: 'phone', label: 'TELEFONO', value: phone },
-            { key: 'email', label: 'EMAIL', value: email }
-          ],
-          backFields: [
-            { key: 'website', label: 'Sito', value: website || '' }
-          ]
-        },
-        barcodes: [{
-          format: 'PKBarcodeFormatQR',
-          message: payload,
-          messageEncoding: 'iso-8859-1'
-        }]
-      },
-      certificates: {
-        wwdr: APPLE.wwdrPath,
-        signerCert: APPLE.p12Path,
-        signerKey: APPLE.p12Path,
-        signerKeyPassphrase: APPLE.p12Password
-      },
-      overrides: {
-        'icon.png': fs.readFileSync(path.join(assetsDir, 'icon.png')),
-        'logo.png': fs.readFileSync(path.join(assetsDir, 'logo.png'))
-      }
-    });
+// --- APPLE PASS (.pkpass) ---
+const certificates = {
+  wwdr: fs.readFileSync(APPLE.wwdrPath),
+  signerCert: fs.readFileSync(APPLE.p12Path),
+  signerKey: fs.readFileSync(APPLE.p12Path),
+  signerKeyPassphrase: APPLE.p12Password
+};
 
-    const fileId = uuidv4();
-    const outfile = path.join(passesDir, `${fileId}.pkpass`);
-    await pass.asBuffer().then(buf => fs.writeFileSync(outfile, buf));
+const passProps = {
+  formatVersion: 1,
+  description: 'Business Card',
+  organizationName: company,
+  teamIdentifier: APPLE.teamIdentifier,
+  passTypeIdentifier: APPLE.passTypeIdentifier,
+  serialNumber: uuidv4(),
+  backgroundColor: brandColor,
+  labelColor: '#ffffff',
+  foregroundColor: '#ffffff',
+  logoText: logoText,
+
+  // tipo "generic" con i campi principali
+  generic: {
+    primaryFields: [
+      { key: 'name', label: 'NOME', value: name }
+    ],
+    secondaryFields: [
+      { key: 'role', label: 'RUOLO', value: role },
+      { key: 'company', label: 'AZIENDA', value: company }
+    ],
+    auxiliaryFields: [
+      { key: 'phone', label: 'TELEFONO', value: phone },
+      { key: 'email', label: 'EMAIL', value: email }
+    ],
+    backFields: [
+      { key: 'website', label: 'SITO', value: website || '' }
+    ]
+  }
+};
+
+// Crea istanza PKPass “da zero”
+const pass = new PKPass({}, certificates, passProps);
+
+// Aggiunge le immagini (possono essere placeholder, meglio sostituirle in /assets)
+pass.addBuffer('icon.png', fs.readFileSync(path.join(assetsDir, 'icon.png')));
+pass.addBuffer('logo.png', fs.readFileSync(path.join(assetsDir, 'logo.png')));
+
+// Imposta il QR
+pass.setBarcodes([{
+  format: 'PKBarcodeFormatQR',
+  message: payload,
+  messageEncoding: 'iso-8859-1'
+}]);
+
+const fileId = uuidv4();
+const outfile = path.join(passesDir, `${fileId}.pkpass`);
+const buf = await pass.getAsBuffer(); // << importante: getAsBuffer()
+fs.writeFileSync(outfile, buf);
+
 
     // --- GOOGLE SAVE LINK ---
     const androidSaveUrl = await createGoogleSaveUrl(`businesscard-${fileId}`, {
