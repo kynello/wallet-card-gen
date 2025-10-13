@@ -7,6 +7,17 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import fs from 'fs';
+// Debug: verifica se i certificati esistono
+try {
+  console.log("🔍 Verifica certificati su Render...");
+  console.log("/etc/secrets/pass.p12 →", fs.existsSync("/etc/secrets/pass.p12"));
+  console.log("/etc/secrets/wwdr.cer →", fs.existsSync("/etc/secrets/wwdr.cer"));
+  console.log("./certs/pass.p12 →", fs.existsSync("./certs/pass.p12"));
+  console.log("./certs/wwdr.cer →", fs.existsSync("./certs/wwdr.cer"));
+} catch (e) {
+  console.error("Errore controllo certificati:", e);
+}
+
 import { PKPass } from 'passkit-generator';
 
 dotenv.config();
