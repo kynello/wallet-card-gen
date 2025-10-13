@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import fs from 'fs';
-import { Pass } from 'passkit-generator';
+import { PKPass } from 'passkit-generator';
 
 dotenv.config();
 
