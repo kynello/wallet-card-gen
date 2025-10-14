@@ -1,3 +1,4 @@
+// server.js — versione consolidata e “a prova di bomba”
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,17 +8,15 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import fs from 'fs';
-import { execSync } from 'child_process';
+import { PKPass } from 'passkit-generator';
 
-// --- PATH RESOLVER PER CERTIFICATI ---
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ──────────────────────────────────────────────────────────────
+// Helper: risolvi il primo path esistente
 function resolveFirstExisting(paths) {
   for (const p of paths) {
     if (!p) continue;
@@ -26,25 +25,42 @@ function resolveFirstExisting(paths) {
   return null;
 }
 
-// Leggiamo i path da ENV *oppure* dai percorsi standard di Render
+// ──────────────────────────────────────────────────────────────
+// Cartelle utili
+const passesDir = path.join(__dirname, 'passes');
+const assetsDir = path.join(__dirname, 'assets');
+if (!fs.existsSync(passesDir)) fs.mkdirSync(passesDir, { recursive: true });
+
+// ──────────────────────────────────────────────────────────────
+// ENV base
+const PORT = process.env.PORT || 3000; // Render passa la porta via env; NON impostarla tu
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+// Apple IDs (DEV: devono combaciare con il certificato!)
+const APPLE = {
+  passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER,
+  teamIdentifier: process.env.APPLE_TEAM_IDENTIFIER,
+};
+
+// Risolvi i path dei certificati (usa ENV o Secret Files noti)
 const SIGNER_CERT_PATH = resolveFirstExisting([
-  process.env.SIGNER_CERT_PATH,                     // es. /etc/secrets/signerCert.pem
+  process.env.SIGNER_CERT_PATH,                    // es. /etc/secrets/signerCert.pem o ./certs/signerCert.pem
   path.join(__dirname, 'certs', 'signerCert.pem'),
-  '/etc/secrets/signerCert.pem'
+  '/etc/secrets/signerCert.pem',
 ]);
 
 const SIGNER_KEY_PATH = resolveFirstExisting([
-  process.env.SIGNER_KEY_PATH,                      // es. /etc/secrets/signerKey.pem
+  process.env.SIGNER_KEY_PATH,                     // es. /etc/secrets/signerKey.pem o ./certs/signerKey.pem
   path.join(__dirname, 'certs', 'signerKey.pem'),
-  '/etc/secrets/signerKey.pem'
+  '/etc/secrets/signerKey.pem',
 ]);
 
 const WWDR_PATH = resolveFirstExisting([
-  process.env.APPLE_WWDR_PATH,                      // es. /etc/secrets/wwdr.pem  (consigliato PEM)
+  process.env.APPLE_WWDR_PATH,                     // CONSIGLIATO PEM (wwdr.pem)
   path.join(__dirname, 'certs', 'wwdr.pem'),
   '/etc/secrets/wwdr.pem',
   '/etc/secrets/wwdr.cer',
-  path.join(__dirname, 'certs', 'wwdr.cer')
+  path.join(__dirname, 'certs', 'wwdr.cer'),
 ]);
 
 console.log('🔎 PATHS →',
@@ -53,119 +69,63 @@ console.log('🔎 PATHS →',
   '\n  WWDR_PATH       :', WWDR_PATH
 );
 
-// (Opzionale) DEBUG OpenSSL: esegui solo se trovi il certificato
-try {
-  if (SIGNER_CERT_PATH) {
-    const info = execSync(
-      `openssl x509 -in ${SIGNER_CERT_PATH} -noout -subject -issuer -dates -nameopt RFC2253`
-    ).toString();
-    console.log('=== SIGNER CERT INFO ===\n' + info);
-  } else {
-    console.warn('⚠️ signerCert non trovato: salta debug OpenSSL.');
+// ──────────────────────────────────────────────────────────────
+// Google Wallet config
+// Preferisco leggere tutto il JSON da un Secret File (GOOGLE_CREDENTIALS_PATH).
+// In alternativa, puoi usare GOOGLE_SA_EMAIL + GOOGLE_SA_PRIVATE_KEY da ENV.
+const googleCredsPath = process.env.GOOGLE_CREDENTIALS_PATH || null;
+let googleCreds = {};
+if (googleCredsPath) {
+  try {
+    googleCreds = JSON.parse(fs.readFileSync(googleCredsPath, 'utf8'));
+    console.log('✅ GOOGLE_CREDENTIALS_PATH letto:', googleCredsPath);
+  } catch (e) {
+    console.warn('⚠️ Impossibile leggere/parsare GOOGLE_CREDENTIALS_PATH:', googleCredsPath, e.message);
   }
-} catch (e) {
-  console.warn('⚠️ OpenSSL debug saltato:', e.message);
 }
 
+const GOOGLE = {
+  issuerId: process.env.GOOGLE_ISSUER_ID,                         // numero lungo dell’emittente
+  classSuffix: process.env.GOOGLE_CLASS_SUFFIX || 'businesscard',
+  saEmail: googleCreds.client_email || process.env.GOOGLE_SA_EMAIL || '',
+  saPrivateKey: googleCreds.private_key || (process.env.GOOGLE_SA_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+};
 
-import { PKPass } from 'passkit-generator';
-
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+// ──────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const PORT = process.env.PORT || 3000;
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+// Health route per Render
+app.get('/health', (_req, res) => res.status(200).send('ok'));
 
-// --- Apple Wallet config ---
-const APPLE = {
-  passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER,
-  teamIdentifier: process.env.APPLE_TEAM_IDENTIFIER,
-  certPath: process.env.APPLE_CERT_PATH || '/etc/secrets/signerCert.pem',
-  keyPath: process.env.APPLE_KEY_PATH || '/etc/secrets/signerKey.pem',
-   wwdrPath: process.env.APPLE_WWDR_PATH || '/etc/secrets/wwdr.pem'
-};
-
-// --- Google Wallet config ---
-let GOOGLE = {
-  issuerId: process.env.GOOGLE_ISSUER_ID,
-  classSuffix: process.env.GOOGLE_CLASS_SUFFIX || 'businesscard',
-  saEmail: '',
-  saPrivateKey: ''
-};
-
-// Leggi credenziali Google da Secret File
-const googleSaPath = '/etc/secrets/google-sa-key.json';
-if (fs.existsSync(googleSaPath)) {
+// ──────────────────────────────────────────────────────────────
+// Helper colori (alcune versioni del lib preferiscono rgb())
+function hexToRgbCss(hex) {
   try {
-    const saFile = JSON.parse(fs.readFileSync(googleSaPath, 'utf8'));
-    GOOGLE.saEmail = saFile.client_email;
-    GOOGLE.saPrivateKey = saFile.private_key;
-    console.log('✅ Credenziali Google caricate da Secret File');
-  } catch (e) {
-    console.error('❌ Errore lettura google-sa-key.json:', e);
-  }
-} else {
-  // Fallback alle variabili d'ambiente
-  GOOGLE.saEmail = process.env.GOOGLE_SA_EMAIL;
-  GOOGLE.saPrivateKey = (process.env.GOOGLE_SA_PRIVATE_KEY || '').replace(/\\n/g, '\n');
-  console.log('⚠️ Google SA key da variabili d\'ambiente (considera di usare Secret File)');
+    const h = (hex || '#202020').replace('#','').trim();
+    const n = parseInt(h, 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return `rgb(${r},${g},${b})`;
+  } catch { return 'rgb(32,32,32)'; }
 }
 
-// Simple validation check
-function assertEnv() {
-  const missing = [];
-  if (!APPLE.passTypeIdentifier) missing.push('APPLE_PASS_TYPE_IDENTIFIER');
-  if (!APPLE.teamIdentifier) missing.push('APPLE_TEAM_IDENTIFIER');
-  if (!APPLE.certPath || !fs.existsSync(APPLE.certPath)) missing.push('APPLE_CERT_PATH (file mancante)');
-  if (!APPLE.keyPath || !fs.existsSync(APPLE.keyPath)) missing.push('APPLE_KEY_PATH (file mancante)');
-  if (!APPLE.wwdrPath || !fs.existsSync(APPLE.wwdrPath)) console.warn('[WARN] APPLE_WWDR_PATH non trovato');
-  if (!GOOGLE.issuerId) missing.push('GOOGLE_ISSUER_ID');
-  if (!GOOGLE.saEmail) missing.push('GOOGLE_SA_EMAIL');
-  if (!GOOGLE.saPrivateKey) missing.push('GOOGLE_SA_PRIVATE_KEY');
-  if (missing.length) {
-    console.error('Variabili mancanti:', missing.join(', '));
-  }
-}
-assertEnv();
-
-// Ensure folders
-const passesDir = path.join(__dirname, 'passes');
-if (!fs.existsSync(passesDir)) fs.mkdirSync(passesDir);
-
-// Minimal assets (PNG files) for the pass
-const assetsDir = path.join(__dirname, 'assets');
-
-// Utility: ensure Google Generic Class exists (best-effort)
+// ──────────────────────────────────────────────────────────────
+// Google: crea/usa la Generic Class e genera il Save Link
 async function ensureGoogleGenericClass(authClient, classId) {
-  const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`;
-  const headers = { Authorization: `Bearer ${await authClient.getAccessToken()}`, 'Content-Type': 'application/json' };
+  const token = await authClient.getAccessToken();
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  // Try to GET class
-  let res = await fetch(url, { headers });
+  let res = await fetch(`https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`, { headers });
   if (res.status === 200) return true;
 
   if (res.status === 404) {
-    // Create it
     const body = {
       id: classId,
-      classTemplateInfo: {
-        cardTemplateOverride: {
-          cardRowTemplateInfos: [
-            { twoItems: { startItem: { firstValue: { fields: [{fieldPath:'object.textModulesData[0]'}] } },
-                          endItem:   { firstValue: { fields: [{fieldPath:'object.textModulesData[1]'}] } } } }
-          ]
-        }
-      },
-      reviewStatus: "UNDER_REVIEW",  // or "DRAFT" initially
-      title: "Business Card",
-      issuerName: "Your Brand",
-      hexBackgroundColor: "#202020"
+      title: 'Business Card',
+      issuerName: 'Your Brand',
+      hexBackgroundColor: '#202020',
+      reviewStatus: 'UNDER_REVIEW',
     };
     res = await fetch('https://walletobjects.googleapis.com/walletobjects/v1/genericClass', {
       method: 'POST', headers, body: JSON.stringify(body)
@@ -175,20 +135,17 @@ async function ensureGoogleGenericClass(authClient, classId) {
   return false;
 }
 
-// Create Google Save URL (JWT)
 async function createGoogleSaveUrl(payloadObjId, person) {
+  if (!GOOGLE.issuerId || !GOOGLE.saEmail || !GOOGLE.saPrivateKey) return null;
+
   const classId = `${GOOGLE.issuerId}.${GOOGLE.classSuffix}`;
   const objectId = `${GOOGLE.issuerId}.${payloadObjId}`;
 
   const auth = new GoogleAuth({
-    credentials: { 
-      client_email: GOOGLE.saEmail, 
-      private_key: GOOGLE.saPrivateKey 
-    },
-    scopes: ['https://www.googleapis.com/auth/wallet_object.issuer']
+    credentials: { client_email: GOOGLE.saEmail, private_key: GOOGLE.saPrivateKey },
+    scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
   });
   const client = await auth.getClient();
-
   await ensureGoogleGenericClass(client, classId);
 
   const jwtPayload = {
@@ -200,163 +157,146 @@ async function createGoogleSaveUrl(payloadObjId, person) {
         id: objectId,
         classId,
         hexBackgroundColor: '#202020',
-        logo: { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } },
-        cardTitle: { defaultValue: { language: 'it', value: person.company || 'Business Card' } },
+        header:    { defaultValue: { language: 'it', value: person.name || '' } },
         subheader: { defaultValue: { language: 'it', value: person.role || '' } },
-        header: { defaultValue: { language: 'it', value: person.name || '' } },
+        cardTitle: { defaultValue: { language: 'it', value: person.company || 'Business Card' } },
         heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
+        logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } },
         barcode: { type: 'QR_CODE', value: person.qrPayload },
         textModulesData: [
           { header: 'Telefono', body: person.phone || '' },
-          { header: 'Email', body: person.email || '' },
-          { header: 'Sito', body: person.website || '' }
+          { header: 'Email',    body: person.email || ''  },
+          { header: 'Sito',     body: person.website || '' }
         ]
       }]
     }
   };
 
+  // firma senza keyid/issuer nelle options (iss è già nel payload)
   const token = jwt.sign(jwtPayload, GOOGLE.saPrivateKey, { algorithm: 'RS256' });
   return `https://pay.google.com/gp/v/save/${token}`;
 }
 
-// Route: create pass for both platforms
+// ──────────────────────────────────────────────────────────────
+// Crea pass per entrambe le piattaforme
 app.post('/create-pass', async (req, res) => {
   try {
-    const { name, role, company, phone, email, website, brandColor = '#202020', logoText = 'Business Card' } = req.body || {};
+    const {
+      name, role, company, phone, email, website,
+      brandColor = '#202020', logoText = 'Business Card'
+    } = req.body || {};
 
     if (!name || !role || !company || !phone || !email) {
-      return res.json({ error: 'Compila tutti i campi obbligatori: nome, ruolo, azienda, telefono, email.' });
+      return res.json({ error: 'Compila nome, ruolo, azienda, telefono, email.' });
+    }
+    if (!APPLE.passTypeIdentifier || !APPLE.teamIdentifier) {
+      return res.json({ error: 'Config Apple mancante: APPLE_PASS_TYPE_IDENTIFIER / APPLE_TEAM_IDENTIFIER.' });
     }
 
-    if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
-  return res.json({ error: 'Certificati Apple non disponibili lato server. Controlla Secret Files/ENV (vedi log PATHS).' });
-}
-
-    // Build QR payload (vCard-like link or URL)
-    const payload = JSON.stringify({
-      name, role, company, phone, email, website
-    });
+    // QR con payload “biglietto”
+    const payload = JSON.stringify({ name, role, company, phone, email, website });
     const qrDataUrl = await QRCode.toDataURL(payload);
 
+    // Verifica presenza cert Apple
+    if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
+      return res.json({ error: 'Certificati Apple non disponibili lato server. Controlla Secret Files/ENV (vedi log PATHS).' });
+    }
 
- // 🔎 DEBUG: info del certificato di firma (assicurati che il path sia quello reale dei tuoi PEM su Render)
-try {
-  const signerCertPath = path.join(__dirname, 'certs', 'signerCert.pem'); // se i PEM sono altrove, metti quel path
-  const info = execSync(`openssl x509 -in ${signerCertPath} -noout -subject -issuer -dates -nameopt RFC2253`).toString();
-  console.log('=== SIGNER CERT INFO ===\n' + info);
-} catch (e) {
-  console.warn('⚠️ OpenSSL non disponibile o signerCert.pem non trovato:', e.message);
-}
-   
-// --- APPLE PASS (.pkpass) ---
-// --- CERTIFICATI PER FIRMA PASS ---
-if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
-  console.warn('⚠️ Cert paths mancanti: Apple pass fallirà finché non sono presenti (vedi PATHS sopra).');
-}
+    console.log('PASS IDS → passTypeIdentifier:', APPLE.passTypeIdentifier, 'teamIdentifier:', APPLE.teamIdentifier);
 
-const certificates = {
-  wwdr: WWDR_PATH ? fs.readFileSync(WWDR_PATH) : null,
-  signerCert: SIGNER_CERT_PATH ? fs.readFileSync(SIGNER_CERT_PATH) : null,
-  signerKey: SIGNER_KEY_PATH ? fs.readFileSync(SIGNER_KEY_PATH) : null
-};
+    // ── APPLE PASS (.pkpass)
+    const certificates = {
+      wwdr: fs.readFileSync(WWDR_PATH),
+      signerCert: fs.readFileSync(SIGNER_CERT_PATH),
+      signerKey: fs.readFileSync(SIGNER_KEY_PATH),
+    };
 
-// helper: normalizza colore in formato accettato da Apple (rgb)
-function hexToRgbCss(hex) {
-  try {
-    const h = hex.replace('#','').trim();
-    const bigint = parseInt(h, 16);
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
-    const b = bigint & 255;
-    return `rgb(${r},${g},${b})`;
-  } catch { return 'rgb(32,32,32)'; }
-}
-
-// Crea istanza PKPass - PRIMA SOLO I CERTIFICATI
-// DEBUG: mostra gli ID che mettiamo nel pass.json
-console.log('PASS IDS → passTypeIdentifier:', APPLE.passTypeIdentifier, 'teamIdentifier:', APPLE.teamIdentifier);
-const pass = new PKPass({}, certificates);
-
-// POI imposta le proprietà del pass
-pass.type = 'generic';
-pass.serialNumber = uuidv4();
-pass.description = 'Business Card';
-pass.organizationName = company;
-pass.passTypeIdentifier = APPLE.passTypeIdentifier;
-pass.teamIdentifier = APPLE.teamIdentifier;
-pass.backgroundColor = hexToRgbCss(brandColor || '#202020');
-pass.labelColor = 'rgb(255,255,255)';
-pass.foregroundColor = 'rgb(255,255,255)';
-pass.logoText = logoText;
-
-// Aggiungi i campi
-pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
-pass.secondaryFields.push(
-  { key: 'role', label: 'RUOLO', value: String(role) },
-  { key: 'company', label: 'AZIENDA', value: String(company) }
-);
-pass.auxiliaryFields.push(
-  { key: 'phone', label: 'TELEFONO', value: String(phone) },
-  { key: 'email', label: 'EMAIL', value: String(email) }
-);
-pass.backFields.push({ key: 'website', label: 'SITO', value: String(website || '') });
-
-// Aggiungi barcode
-pass.setBarcodes({
-  message: payload,
-  format: 'PKBarcodeFormatQR',
-  messageEncoding: 'iso-8859-1'
-});
-
-// Assets: icon e icon@2x sono importanti
-pass.addBuffer('icon.png', fs.readFileSync(path.join(assetsDir, 'icon.png')));
-pass.addBuffer('icon@2x.png', fs.readFileSync(path.join(assetsDir, 'icon@2x.png')));
-if (fs.existsSync(path.join(assetsDir, 'logo.png'))) {
-  pass.addBuffer('logo.png', fs.readFileSync(path.join(assetsDir, 'logo.png')));
-}
-if (fs.existsSync(path.join(assetsDir, 'logo@2x.png'))) {
-  pass.addBuffer('logo@2x.png', fs.readFileSync(path.join(assetsDir, 'logo@2x.png')));
-}
-
-// Genera buffer e salva
-const fileId = uuidv4();
-const outfile = path.join(passesDir, `${fileId}.pkpass`);
-const buf = await pass.getAsBuffer();
-fs.writeFileSync(outfile, buf);
-
-    // --- GOOGLE SAVE LINK ---
-    const androidSaveUrl = await createGoogleSaveUrl(`businesscard-${fileId}`, {
-      name, role, company, phone, email, website, qrPayload: payload
+    const pass = new PKPass({}, certificates, {
+      formatVersion: 1,
+      description: 'Business Card',
+      organizationName: company,
+      teamIdentifier: APPLE.teamIdentifier,
+      passTypeIdentifier: APPLE.passTypeIdentifier,
+      serialNumber: uuidv4(),
+      backgroundColor: hexToRgbCss(brandColor),
+      labelColor: 'rgb(255,255,255)',
+      foregroundColor: 'rgb(255,255,255)',
+      logoText,
     });
 
-    const iosDownloadUrl = `${BASE_URL}/download/pkpass/${fileId}`;
+    // tipo e campi (imposta type PRIMA di toccare i campi)
+    pass.type = 'generic';
+    pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
+    pass.secondaryFields.push(
+      { key: 'role', label: 'RUOLO', value: String(role) },
+      { key: 'company', label: 'AZIENDA', value: String(company) }
+    );
+    pass.auxiliaryFields.push(
+      { key: 'phone', label: 'TELEFONO', value: String(phone) },
+      { key: 'email', label: 'EMAIL', value: String(email) }
+    );
+    pass.backFields.push({ key: 'website', label: 'SITO', value: String(website || '') });
 
-    res.json({ iosDownloadUrl, androidSaveUrl, qrDataUrl });
+    // barcode in ARRAY (iOS vuole array)
+    pass.setBarcodes([{
+      format: 'PKBarcodeFormatQR',
+      message: payload,
+      messageEncoding: 'iso-8859-1'
+    }]);
+
+    // Asset obbligatori: icon.png 29x29 & icon@2x.png 58x58
+    const icon1 = path.join(assetsDir, 'icon.png');
+    const icon2 = path.join(assetsDir, 'icon@2x.png');
+    if (fs.existsSync(icon1)) pass.addBuffer('icon.png', fs.readFileSync(icon1));
+    if (fs.existsSync(icon2)) pass.addBuffer('icon@2x.png', fs.readFileSync(icon2));
+    const logo1 = path.join(assetsDir, 'logo.png');
+    const logo2 = path.join(assetsDir, 'logo@2x.png');
+    if (fs.existsSync(logo1)) pass.addBuffer('logo.png', fs.readFileSync(logo1));
+    if (fs.existsSync(logo2)) pass.addBuffer('logo@2x.png', fs.readFileSync(logo2));
+
+    const fileId = uuidv4();
+    const outfile = path.join(passesDir, `${fileId}.pkpass`);
+    const buf = await pass.getAsBuffer();
+    fs.writeFileSync(outfile, buf);
+
+    // ── GOOGLE: Save link (se configurato)
+    let androidSaveUrl = null;
+    try {
+      androidSaveUrl = await createGoogleSaveUrl(`businesscard-${fileId}`, {
+        name, role, company, phone, email, website, qrPayload: payload
+      });
+    } catch (e) {
+      console.warn('Google Wallet non disponibile:', e.message);
+    }
+
+    const iosDownloadUrl = `${BASE_URL}/download/pkpass/${fileId}`;
+    return res.json({ iosDownloadUrl, androidSaveUrl, qrDataUrl });
+
   } catch (err) {
-    console.error(err);
-    res.json({ error: 'Errore durante la generazione del pass. Controlla i certificati e le variabili .env.' });
+    console.error('ERR /create-pass:', err);
+    return res.json({ error: `Errore durante la generazione del pass: ${err?.message || 'unknown'}` });
   }
 });
 
-// Serve .pkpass con header compatibili iOS
+// ──────────────────────────────────────────────────────────────
+// Download .pkpass con header compatibili iOS
 app.get('/download/pkpass/:id', (req, res) => {
-  const file = path.join(__dirname, 'passes', `${req.params.id}.pkpass`);
+  const file = path.join(passesDir, `${req.params.id}.pkpass`);
   if (!fs.existsSync(file)) return res.status(404).send('Not found');
 
   const stat = fs.statSync(file);
   const buf = fs.readFileSync(file);
-
-  console.log(`[PKPASS] Serving ${req.params.id}.pkpass, size=${stat.size} bytes`);
+  console.log(`[PKPASS] Serving ${path.basename(file)}, size=${stat.size} bytes`);
 
   res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
   res.setHeader('Content-Disposition', 'inline; filename="businesscard.pkpass"');
   res.setHeader('Content-Transfer-Encoding', 'binary');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Length', stat.size);
-  res.status(200).end(buf);
+  return res.status(200).end(buf);
 });
 
-// Serve assets (logo/icon) statically
+// ──────────────────────────────────────────────────────────────
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 app.listen(PORT, () => {
