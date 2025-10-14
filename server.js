@@ -38,7 +38,7 @@ const APPLE = {
   teamIdentifier: process.env.APPLE_TEAM_IDENTIFIER,
   certPath: process.env.APPLE_CERT_PATH || '/etc/secrets/signerCert.pem',
   keyPath: process.env.APPLE_KEY_PATH || '/etc/secrets/signerKey.pem',
-   wwdrPath: process.env.APPLE_WWDR_PATH || '/etc/secrets/wwdr.pem'
+   wwdrPath: process.env.APPLE_WWDR_PATH || '/etc/secrets/wwdr.cer'
 };
 
 // --- Google Wallet config ---
