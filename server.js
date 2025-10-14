@@ -1,4 +1,4 @@
-// server.js — versione consolidata e “a prova di bomba”
+// server.js — versione consolidata e "a prova di bomba"
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -33,7 +33,7 @@ if (!fs.existsSync(passesDir)) fs.mkdirSync(passesDir, { recursive: true });
 
 // ──────────────────────────────────────────────────────────────
 // ENV base
-const PORT = process.env.PORT || 3000; // Render passa la porta via env; NON impostarla tu
+const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 // Apple IDs (DEV: devono combaciare con il certificato!)
@@ -44,19 +44,19 @@ const APPLE = {
 
 // Risolvi i path dei certificati (usa ENV o Secret Files noti)
 const SIGNER_CERT_PATH = resolveFirstExisting([
-  process.env.SIGNER_CERT_PATH,                    // es. /etc/secrets/signerCert.pem o ./certs/signerCert.pem
+  process.env.SIGNER_CERT_PATH,
   path.join(__dirname, 'certs', 'signerCert.pem'),
   '/etc/secrets/signerCert.pem',
 ]);
 
 const SIGNER_KEY_PATH = resolveFirstExisting([
-  process.env.SIGNER_KEY_PATH,                     // es. /etc/secrets/signerKey.pem o ./certs/signerKey.pem
+  process.env.SIGNER_KEY_PATH,
   path.join(__dirname, 'certs', 'signerKey.pem'),
   '/etc/secrets/signerKey.pem',
 ]);
 
 const WWDR_PATH = resolveFirstExisting([
-  process.env.APPLE_WWDR_PATH,                     // CONSIGLIATO PEM (wwdr.pem)
+  process.env.APPLE_WWDR_PATH,
   path.join(__dirname, 'certs', 'wwdr.pem'),
   '/etc/secrets/wwdr.pem',
   '/etc/secrets/wwdr.cer',
@@ -71,15 +71,12 @@ console.log('🔎 PATHS →',
 
 // ──────────────────────────────────────────────────────────────
 // Google Wallet config
-// Preferisco leggere tutto il JSON da un Secret File (GOOGLE_CREDENTIALS_PATH).
-// In alternativa, puoi usare GOOGLE_SA_EMAIL + GOOGLE_SA_PRIVATE_KEY da ENV.
 const googleCredsPath = process.env.GOOGLE_CREDENTIALS_PATH || null;
 let googleCreds = {};
 if (googleCredsPath) {
   try {
     googleCreds = JSON.parse(fs.readFileSync(googleCredsPath, 'utf8'));
     console.log('✅ GOOGLE_CREDENTIALS_PATH letto:', googleCredsPath);
-    // 👉 forza anche l'ENV standard usata da GoogleAuth
     process.env.GOOGLE_APPLICATION_CREDENTIALS = googleCredsPath;
   } catch (e) {
     console.warn('⚠️ Impossibile leggere/parsare GOOGLE_CREDENTIALS_PATH:', googleCredsPath, e.message);
@@ -87,11 +84,18 @@ if (googleCredsPath) {
 }
 
 const GOOGLE = {
-  issuerId: process.env.GOOGLE_ISSUER_ID,                         // numero lungo dell’emittente
+  issuerId: process.env.GOOGLE_ISSUER_ID,
   classSuffix: process.env.GOOGLE_CLASS_SUFFIX || 'businesscard',
   saEmail: googleCreds.client_email || process.env.GOOGLE_SA_EMAIL || '',
   saPrivateKey: googleCreds.private_key || (process.env.GOOGLE_SA_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
 };
+
+console.log('🔐 GW CONFIG →',
+  '\n  issuerId:', GOOGLE.issuerId,
+  '\n  classSuffix:', GOOGLE.classSuffix,
+  '\n  saEmail:', GOOGLE.saEmail ? '✓' : '✗',
+  '\n  saPrivateKey:', GOOGLE.saPrivateKey ? '✓ (presente)' : '✗ (mancante)'
+);
 
 // ──────────────────────────────────────────────────────────────
 const app = express();
@@ -102,7 +106,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (_req, res) => res.status(200).send('ok'));
 
 // ──────────────────────────────────────────────────────────────
-// Helper colori (alcune versioni del lib preferiscono rgb())
+// Helper colori
 function hexToRgbCss(hex) {
   try {
     const h = (hex || '#202020').replace('#','').trim();
@@ -113,25 +117,31 @@ function hexToRgbCss(hex) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Google: crea/usa la Generic Class e genera il Save Link
+// Google: crea/usa la Generic Class
 async function ensureGoogleGenericClass(authClient, classId) {
   const urlGet = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`;
 
+  console.log('GW → Verifico classe:', classId);
+
   try {
-    // usa il client autenticato della GoogleAuth (niente fetch né header manuali)
     const r = await authClient.request({ url: urlGet, method: 'GET' });
     if (r.status === 200) {
-      console.log('GW → class esiste:', classId);
+      console.log('✅ GW → Classe già esistente:', classId);
       return true;
     }
   } catch (e) {
     const status = e?.response?.status;
     const data = e?.response?.data;
-    console.warn('GW → getClass error:', status, JSON.stringify(data || e.message));
-    if (status !== 404) return false; // 401/403 o altro → abort
+    
+    if (status === 404) {
+      console.log('GW → Classe non trovata, procedo con creazione...');
+    } else {
+      console.error('❌ GW → Errore verifica classe:', status, JSON.stringify(data || e.message));
+      return false;
+    }
   }
 
-  // Se 404, proviamo a crearla
+  // Crea la classe
   const body = {
     id: classId,
     title: 'Business Card',
@@ -146,23 +156,20 @@ async function ensureGoogleGenericClass(authClient, classId) {
       method: 'POST',
       data: body
     });
-    console.log('GW → createClass status:', r2.status);
+    console.log('✅ GW → Classe creata con successo, status:', r2.status);
     return r2.status === 200;
   } catch (e) {
     const status = e?.response?.status;
     const data = e?.response?.data;
-    console.warn('GW → createClass error:', status, JSON.stringify(data || e.message));
+    console.error('❌ GW → Errore creazione classe:', status, JSON.stringify(data || e.message));
     return false;
   }
 }
 
-
-console.log('GW DIAG → GOOGLE_APPLICATION_CREDENTIALS:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
-console.log('GW DIAG → has JSON file:', fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS || ''));
-console.log('GW DIAG → issuerId:', GOOGLE.issuerId);
-
-// Crea o “upserta” un Generic Object prima di generare il link di salvataggio
+// Crea o aggiorna un Generic Object
 async function createOrUpsertGenericObject(authClient, classId, objectId, person) {
+  console.log('GW → Creo/aggiorno object:', objectId);
+
   const data = {
     id: objectId,
     classId,
@@ -175,10 +182,9 @@ async function createOrUpsertGenericObject(authClient, classId, objectId, person
       { header: 'Telefono', body: person.phone || '' },
       { header: 'Email',    body: person.email || ''  },
       { header: 'Sito',     body: person.website || '' }
-    ]
-    // ⚠️ Per ora niente immagini per evitare errori (riattiva dopo che tutto funziona)
-    // ,heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
-    // ,logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } }
+    ],
+    heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
+    logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } }
   };
 
   try {
@@ -187,63 +193,100 @@ async function createOrUpsertGenericObject(authClient, classId, objectId, person
       method: 'POST',
       data
     });
-    console.log('GW → insertObject status:', r.status);
+    console.log('✅ GW → Object creato, status:', r.status);
     return true;
   } catch (e) {
     const status = e?.response?.status;
-    const msg = e?.response?.data || e?.message;
-    if (status === 409) { // già esiste → va bene
-      console.log('GW → object già esistente:', objectId);
-      return true;
+    const errorData = e?.response?.data;
+    
+    if (status === 409) {
+      console.log('⚠️ GW → Object già esistente, tento update...');
+      // Prova update
+      try {
+        const r2 = await authClient.request({
+          url: `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${encodeURIComponent(objectId)}`,
+          method: 'PUT',
+          data
+        });
+        console.log('✅ GW → Object aggiornato, status:', r2.status);
+        return true;
+      } catch (e2) {
+        console.error('❌ GW → Errore update object:', e2?.response?.status, JSON.stringify(e2?.response?.data || e2.message));
+        return false;
+      }
     }
-    console.warn('GW → insertObject error:', status, JSON.stringify(msg));
+    
+    console.error('❌ GW → Errore creazione object:', status, JSON.stringify(errorData || e.message));
     return false;
   }
 }
 
-
+// Genera il Save URL per Google Wallet
 async function createGoogleSaveUrl(payloadObjId, person) {
-  if (!GOOGLE.issuerId || !GOOGLE.saEmail || !GOOGLE.saPrivateKey) return null;
+  if (!GOOGLE.issuerId || !GOOGLE.saEmail || !GOOGLE.saPrivateKey) {
+    console.error('❌ GW → Configurazione mancante (issuerId, saEmail o saPrivateKey)');
+    throw new Error('Configurazione Google Wallet incompleta');
+  }
 
-  console.log('GW → issuerId:', GOOGLE.issuerId, 'classSuffix:', GOOGLE.classSuffix);
+  console.log('🚀 GW → Inizio generazione Save URL');
+  console.log('GW → issuerId:', GOOGLE.issuerId);
+  console.log('GW → classSuffix:', GOOGLE.classSuffix);
+  
   const classId = `${GOOGLE.issuerId}.${GOOGLE.classSuffix}`;
-  console.log('GW → classId:', classId);
   const objectId = `${GOOGLE.issuerId}.${payloadObjId}`;
+  
+  console.log('GW → classId completo:', classId);
+  console.log('GW → objectId completo:', objectId);
 
-  const auth = new GoogleAuth({
-  scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
-  });
-  const client = await auth.getClient(); // <— questo 'client' passalo a ensureGoogleGenericClass
-  const ok = await ensureGoogleGenericClass(client, classId);
-  await ensureGoogleGenericClass(client, classId);
-
-  const jwtPayload = {
-    iss: GOOGLE.saEmail,
-    aud: 'google',
-    typ: 'savetowallet',
-    payload: {
-      genericObjects: [{
-        id: objectId,
-        classId,
-        hexBackgroundColor: '#202020',
-        header:    { defaultValue: { language: 'it', value: person.name || '' } },
-        subheader: { defaultValue: { language: 'it', value: person.role || '' } },
-        cardTitle: { defaultValue: { language: 'it', value: person.company || 'Business Card' } },
-        heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
-        logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } },
-        barcode: { type: 'QR_CODE', value: person.qrPayload },
-        textModulesData: [
-          { header: 'Telefono', body: person.phone || '' },
-          { header: 'Email',    body: person.email || ''  },
-          { header: 'Sito',     body: person.website || '' }
-        ]
-      }]
+  try {
+    // 1. Autentica
+    console.log('GW → Step 1: Autenticazione...');
+    const auth = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
+    });
+    const client = await auth.getClient();
+    console.log('✅ GW → Autenticazione completata');
+    
+    // 2. Assicurati che la classe esista
+    console.log('GW → Step 2: Verifica/Creazione classe...');
+    const classOk = await ensureGoogleGenericClass(client, classId);
+    if (!classOk) {
+      throw new Error('Impossibile creare/verificare la classe Google Wallet');
     }
-  };
+    
+    // 3. Crea l'object
+    console.log('GW → Step 3: Creazione/Update object...');
+    const objectOk = await createOrUpsertGenericObject(client, classId, objectId, person);
+    if (!objectOk) {
+      throw new Error('Impossibile creare/aggiornare l\'object Google Wallet');
+    }
 
-  // firma senza keyid/issuer nelle options (iss è già nel payload)
-  const token = jwt.sign(jwtPayload, GOOGLE.saPrivateKey, { algorithm: 'RS256' });
-  return `https://pay.google.com/gp/v/save/${token}`;
+    // 4. Genera il JWT
+    console.log('GW → Step 4: Generazione JWT...');
+    const jwtPayload = {
+      iss: GOOGLE.saEmail,
+      aud: 'google',
+      typ: 'savetowallet',
+      iat: Math.floor(Date.now() / 1000),
+      payload: {
+        genericObjects: [{ id: objectId }]
+      }
+    };
+
+    const token = jwt.sign(jwtPayload, GOOGLE.saPrivateKey, { algorithm: 'RS256' });
+    const saveUrl = `https://pay.google.com/gp/v/save/${token}`;
+    
+    console.log('✅ GW → Save URL generato con successo');
+    console.log('GW → URL:', saveUrl.substring(0, 80) + '...');
+    
+    return saveUrl;
+    
+  } catch (error) {
+    console.error('❌ GW → Errore durante generazione Save URL:');
+    console.error('   Messaggio:', error.message);
+    console.error('   Stack:', error.stack);
+    throw error;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -255,6 +298,8 @@ app.post('/create-pass', async (req, res) => {
       brandColor = '#202020', logoText = 'Business Card'
     } = req.body || {};
 
+    console.log('📝 Richiesta creazione pass per:', name);
+
     if (!name || !role || !company || !phone || !email) {
       return res.json({ error: 'Compila nome, ruolo, azienda, telefono, email.' });
     }
@@ -262,7 +307,7 @@ app.post('/create-pass', async (req, res) => {
       return res.json({ error: 'Config Apple mancante: APPLE_PASS_TYPE_IDENTIFIER / APPLE_TEAM_IDENTIFIER.' });
     }
 
-    // QR con payload “biglietto”
+    // QR con payload "biglietto"
     const payload = JSON.stringify({ name, role, company, phone, email, website });
     const qrDataUrl = await QRCode.toDataURL(payload);
 
@@ -271,7 +316,7 @@ app.post('/create-pass', async (req, res) => {
       return res.json({ error: 'Certificati Apple non disponibili lato server. Controlla Secret Files/ENV (vedi log PATHS).' });
     }
 
-    console.log('PASS IDS → passTypeIdentifier:', APPLE.passTypeIdentifier, 'teamIdentifier:', APPLE.teamIdentifier);
+    console.log('🍎 Generazione Apple Pass...');
 
     // ── APPLE PASS (.pkpass)
     const certificates = {
@@ -293,7 +338,7 @@ app.post('/create-pass', async (req, res) => {
       logoText,
     });
 
-    // tipo e campi (imposta type PRIMA di toccare i campi)
+    // tipo e campi
     pass.type = 'generic';
     pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
     pass.secondaryFields.push(
@@ -306,14 +351,13 @@ app.post('/create-pass', async (req, res) => {
     );
     pass.backFields.push({ key: 'website', label: 'SITO', value: String(website || '') });
 
-    // barcode in ARRAY (iOS vuole array)
     pass.setBarcodes([{
       format: 'PKBarcodeFormatQR',
       message: payload,
       messageEncoding: 'iso-8859-1'
     }]);
 
-    // Asset obbligatori: icon.png 29x29 & icon@2x.png 58x58
+    // Asset obbligatori
     const icon1 = path.join(assetsDir, 'icon.png');
     const icon2 = path.join(assetsDir, 'icon@2x.png');
     if (fs.existsSync(icon1)) pass.addBuffer('icon.png', fs.readFileSync(icon1));
@@ -328,21 +372,41 @@ app.post('/create-pass', async (req, res) => {
     const buf = await pass.getAsBuffer();
     fs.writeFileSync(outfile, buf);
 
-    // ── GOOGLE: Save link (se configurato)
+    console.log('✅ Apple Pass creato:', fileId);
+
+    // ── GOOGLE WALLET
     let androidSaveUrl = null;
+    let androidError = null;
+    
+    console.log('🤖 Generazione Google Wallet...');
     try {
       androidSaveUrl = await createGoogleSaveUrl(`businesscard-${fileId}`, {
         name, role, company, phone, email, website, qrPayload: payload
       });
+      console.log('✅ Google Wallet URL generato con successo');
     } catch (e) {
-      console.warn('Google Wallet non disponibile:', e.message);
+      androidError = e.message;
+      console.error('❌ Google Wallet errore:', e.message);
+      console.error('Stack:', e.stack);
     }
 
     const iosDownloadUrl = `${BASE_URL}/download/pkpass/${fileId}`;
-    return res.json({ iosDownloadUrl, androidSaveUrl, qrDataUrl });
+    
+    console.log('📦 Risposta finale:');
+    console.log('  iOS URL:', iosDownloadUrl);
+    console.log('  Android URL:', androidSaveUrl ? '✓' : '✗');
+    console.log('  Android Error:', androidError || 'nessuno');
+
+    return res.json({ 
+      iosDownloadUrl, 
+      androidSaveUrl, 
+      androidError,
+      qrDataUrl 
+    });
 
   } catch (err) {
-    console.error('ERR /create-pass:', err);
+    console.error('❌ ERR /create-pass:', err);
+    console.error('Stack:', err.stack);
     return res.json({ error: `Errore durante la generazione del pass: ${err?.message || 'unknown'}` });
   }
 });
@@ -369,5 +433,6 @@ app.get('/download/pkpass/:id', (req, res) => {
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📍 BASE_URL: ${BASE_URL}`);
 });
