@@ -269,13 +269,13 @@ app.get('/download/pkpass/:id', (req, res) => {
   const stat = fs.statSync(file);
   const buf = fs.readFileSync(file);
 
+  console.log(`[PKPASS] Serving ${req.params.id}.pkpass, size=${stat.size} bytes`);
+
   res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
-  // inline aiuta Wallet ad aprirlo direttamente
   res.setHeader('Content-Disposition', 'inline; filename="businesscard.pkpass"');
   res.setHeader('Content-Transfer-Encoding', 'binary');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Length', stat.size);
-
   res.status(200).end(buf);
 });
 
