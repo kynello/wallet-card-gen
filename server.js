@@ -11,7 +11,7 @@ import fs from 'fs';
 try {
   console.log("🔍 Verifica certificati su Render...");
   console.log("/etc/secrets/pass.p12 →", fs.existsSync("/etc/secrets/pass.p12"));
-  console.log("/etc/secrets/wwdr.cer →", fs.existsSync("/etc/secrets/wwdr.cer"));
+  console.log("/etc/secrets/wwdr.cer →", fs.existsSync("/etc/secrets/wwdr.pem"));
   console.log("./certs/pass.p12 →", fs.existsSync("./certs/pass.p12"));
   console.log("./certs/wwdr.cer →", fs.existsSync("./certs/wwdr.cer"));
 } catch (e) {
@@ -38,7 +38,7 @@ const APPLE = {
   teamIdentifier: process.env.APPLE_TEAM_IDENTIFIER,
   certPath: process.env.APPLE_CERT_PATH || '/etc/secrets/signerCert.pem',
   keyPath: process.env.APPLE_KEY_PATH || '/etc/secrets/signerKey.pem',
-   wwdrPath: process.env.APPLE_WWDR_PATH || '/etc/secrets/wwdr.cer'
+   wwdrPath: process.env.APPLE_WWDR_PATH || '/etc/secrets/wwdr.pem'
 };
 
 // --- Google Wallet config ---
