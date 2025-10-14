@@ -182,9 +182,10 @@ async function createOrUpsertGenericObject(authClient, classId, objectId, person
       { header: 'Telefono', body: person.phone || '' },
       { header: 'Email',    body: person.email || ''  },
       { header: 'Sito',     body: person.website || '' }
-    ],
-    heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
-    logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } }
+    ]
+    // ⚠️ Immagini temporaneamente disabilitate per debug
+    // heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
+    // logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } }
   };
 
   try {
