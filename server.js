@@ -165,7 +165,7 @@ async function createGoogleSaveUrl(payloadObjId, person) {
     }
   };
 
-  const token = jwt.sign(jwtPayload, GOOGLE.saPrivateKey, { algorithm: 'RS256', keyid: undefined, issuer: GOOGLE.saEmail });
+  const token = jwt.sign(jwtPayload, GOOGLE.saPrivateKey, { algorithm: 'RS256' });
   return `https://pay.google.com/gp/v/save/${token}`;
 }
 
