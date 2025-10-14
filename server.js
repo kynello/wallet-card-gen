@@ -360,6 +360,17 @@ app.post('/create-pass', async (req, res) => {
       labelColor: 'rgb(255,255,255)',
       foregroundColor: 'rgb(255,255,255)',
       logoText,
+      // Aggiungi il barcode direttamente qui nella configurazione iniziale
+      barcode: {
+        message: vCard,
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1'
+      },
+      barcodes: [{
+        message: vCard,
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1'
+      }]
     });
 
     // tipo e campi
@@ -378,23 +389,37 @@ app.post('/create-pass', async (req, res) => {
       { key: 'qr_info', label: 'SCANSIONA IL QR', value: 'Inquadra il codice QR per salvare il contatto' }
     );
 
-    // Barcode nel pass - prova PRIMA con messaggio semplice per test
-    // Se funziona con testMessage ma non con vCard, il problema è il formato vCard
-    const useVCard = true; // Cambia a false per testare con messaggio semplice
+    // Barcode nel pass - usa il metodo della libreria
+    const useVCard = true;
     const barcodeMessage = useVCard ? vCard : testMessage;
     
-    const barcodeConfig = {
-      format: 'PKBarcodeFormatQR',
-      message: barcodeMessage,
-      messageEncoding: 'iso-8859-1'
-    };
-    
-    console.log('🔲 Barcode config:', JSON.stringify(barcodeConfig, null, 2));
+    console.log('🔲 Impostazione barcode...');
     console.log('📏 Message length:', barcodeMessage.length);
+    console.log('📝 Message preview:', barcodeMessage.substring(0, 50) + '...');
     
-    // Imposta sia barcode che barcodes per massima compatibilità
-    pass.barcode = barcodeConfig;
-    pass.barcodes = [barcodeConfig];
+    try {
+      // Prova a impostare il barcode usando il metodo della libreria
+      pass.setBarcodes({
+        message: barcodeMessage,
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1'
+      });
+      console.log('✅ Barcode impostato con successo');
+    } catch (e) {
+      console.error('❌ Errore impostazione barcode:', e.message);
+      // Fallback: prova a impostarlo direttamente nel pass.json prima della generazione
+      pass._fields = pass._fields || {};
+      pass._fields.barcode = {
+        message: barcodeMessage,
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1'
+      };
+      pass._fields.barcodes = [{
+        message: barcodeMessage,
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1'
+      }];
+    }
 
     // Asset obbligatori
     const icon1 = path.join(assetsDir, 'icon.png');
