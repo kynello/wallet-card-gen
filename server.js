@@ -116,24 +116,37 @@ async function ensureGoogleGenericClass(authClient, classId) {
   const token = await authClient.getAccessToken();
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  let res = await fetch(`https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`, { headers });
-  if (res.status === 200) return true;
+  const getUrl = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`;
+  let res = await fetch(getUrl, { headers });
+
+  if (res.status === 200) {
+    console.log('GW → class esiste:', classId);
+    return true;
+  }
+
+  const txtGet = await res.text();
+  console.warn('GW → getClass status:', res.status, txtGet);
 
   if (res.status === 404) {
+    console.warn('GW → class non trovata, provo a crearla:', classId);
     const body = {
       id: classId,
       title: 'Business Card',
       issuerName: 'Your Brand',
       hexBackgroundColor: '#202020',
-      reviewStatus: 'UNDER_REVIEW',
+      reviewStatus: 'UNDER_REVIEW'
     };
-    res = await fetch('https://walletobjects.googleapis.com/walletobjects/v1/genericClass', {
-      method: 'POST', headers, body: JSON.stringify(body)
-    });
+    const createUrl = 'https://walletobjects.googleapis.com/walletobjects/v1/genericClass';
+    res = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(body) });
+    const txtCreate = await res.text();
+    console.log('GW → createClass status:', res.status, txtCreate);
     return res.status === 200;
   }
+
+  // 401/403/altro → di solito permessi dell’SA o issuer sbagliato
   return false;
 }
+
 
 async function createGoogleSaveUrl(payloadObjId, person) {
   if (!GOOGLE.issuerId || !GOOGLE.saEmail || !GOOGLE.saPrivateKey) return null;
