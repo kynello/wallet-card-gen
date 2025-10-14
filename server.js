@@ -190,10 +190,7 @@ const passProps = {
   teamIdentifier: APPLE.teamIdentifier,
   passTypeIdentifier: APPLE.passTypeIdentifier,
   serialNumber: uuidv4(),
-  // 🔑 tipo del pass
-  type: 'generic',
-  // colori in formato rgb (alcune versioni della lib sono pignole)
-  backgroundColor: hexToRgbCss(brandColor || '#202020'),
+backgroundColor: hexToRgbCss(brandColor || '#202020'),
   labelColor: 'rgb(255,255,255)',
   foregroundColor: 'rgb(255,255,255)',
   logoText: logoText,
