@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import fs from 'fs';
+import { execSync } from 'child_process';
 // Debug: verifica se i certificati esistono
 try {
   console.log("🔍 Verifica certificati su Render...");
@@ -184,6 +185,16 @@ app.post('/create-pass', async (req, res) => {
     });
     const qrDataUrl = await QRCode.toDataURL(payload);
 
+
+ // 🔎 DEBUG: info del certificato di firma (assicurati che il path sia quello reale dei tuoi PEM su Render)
+try {
+  const signerCertPath = path.join(__dirname, 'certs', 'signerCert.pem'); // se i PEM sono altrove, metti quel path
+  const info = execSync(`openssl x509 -in ${signerCertPath} -noout -subject -issuer -dates -nameopt RFC2253`).toString();
+  console.log('=== SIGNER CERT INFO ===\n' + info);
+} catch (e) {
+  console.warn('⚠️ OpenSSL non disponibile o signerCert.pem non trovato:', e.message);
+}
+   
 // --- APPLE PASS (.pkpass) ---
 const certificates = {
   wwdr: fs.readFileSync(APPLE.wwdrPath),
@@ -204,6 +215,8 @@ function hexToRgbCss(hex) {
 }
 
 // Crea istanza PKPass - PRIMA SOLO I CERTIFICATI
+// DEBUG: mostra gli ID che mettiamo nel pass.json
+console.log('PASS IDS → passTypeIdentifier:', APPLE.passTypeIdentifier, 'teamIdentifier:', APPLE.teamIdentifier);
 const pass = new PKPass({}, certificates);
 
 // POI imposta le proprietà del pass
