@@ -321,7 +321,13 @@ app.post('/create-pass', async (req, res) => {
       'END:VCARD'
     ].filter(line => line).join('\n');
     
+    // Genera QR sia come DataURL che come Buffer per il pass
     const qrDataUrl = await QRCode.toDataURL(vCard);
+    const qrBuffer = await QRCode.toBuffer(vCard, {
+      errorCorrectionLevel: 'M',
+      type: 'png',
+      width: 300
+    });
 
     // Verifica presenza cert Apple
     if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
@@ -361,13 +367,17 @@ app.post('/create-pass', async (req, res) => {
       { key: 'phone', label: 'TELEFONO', value: String(phone) },
       { key: 'email', label: 'EMAIL', value: String(email) }
     );
-    pass.backFields.push({ key: 'website', label: 'SITO', value: String(website || '') });
+    pass.backFields.push(
+      { key: 'website', label: 'SITO', value: String(website || '') },
+      { key: 'qr_info', label: 'SCANSIONA IL QR', value: 'Inquadra il codice QR per salvare il contatto' }
+    );
 
-    // Barcode nel pass (usa vCard)
+    // Barcode nel pass (usa vCard) - Apple lo mostra automaticamente in basso
     pass.setBarcodes([{
       format: 'PKBarcodeFormatQR',
       message: vCard,
-      messageEncoding: 'iso-8859-1'
+      messageEncoding: 'iso-8859-1',
+      altText: 'Scansiona per salvare il contatto' // Testo alternativo sotto il QR
     }]);
 
     // Asset obbligatori
