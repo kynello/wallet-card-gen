@@ -171,6 +171,18 @@ const certificates = {
   signerKeyPassphrase: APPLE.p12Password
 };
 
+// helper: normalizza colore in formato accettato da Apple (rgb)
+function hexToRgbCss(hex) {
+  try {
+    const h = hex.replace('#','').trim();
+    const bigint = parseInt(h, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgb(${r},${g},${b})`;
+  } catch { return 'rgb(32,32,32)'; }
+}
+
 const passProps = {
   formatVersion: 1,
   description: 'Business Card',
@@ -178,49 +190,50 @@ const passProps = {
   teamIdentifier: APPLE.teamIdentifier,
   passTypeIdentifier: APPLE.passTypeIdentifier,
   serialNumber: uuidv4(),
-  backgroundColor: brandColor,
-  labelColor: '#ffffff',
-  foregroundColor: '#ffffff',
+  // 🔑 tipo del pass
+  type: 'generic',
+  // colori in formato rgb (alcune versioni della lib sono pignole)
+  backgroundColor: hexToRgbCss(brandColor || '#202020'),
+  labelColor: 'rgb(255,255,255)',
+  foregroundColor: 'rgb(255,255,255)',
   logoText: logoText,
-
-  // tipo "generic" con i campi principali
+  // sezione "generic" con i campi
   generic: {
     primaryFields: [
-      { key: 'name', label: 'NOME', value: name }
+      { key: 'name', label: 'NOME', value: String(name) }
     ],
     secondaryFields: [
-      { key: 'role', label: 'RUOLO', value: role },
-      { key: 'company', label: 'AZIENDA', value: company }
+      { key: 'role', label: 'RUOLO', value: String(role) },
+      { key: 'company', label: 'AZIENDA', value: String(company) }
     ],
     auxiliaryFields: [
-      { key: 'phone', label: 'TELEFONO', value: phone },
-      { key: 'email', label: 'EMAIL', value: email }
+      { key: 'phone', label: 'TELEFONO', value: String(phone) },
+      { key: 'email', label: 'EMAIL', value: String(email) }
     ],
     backFields: [
-      { key: 'website', label: 'SITO', value: website || '' }
+      { key: 'website', label: 'SITO', value: String(website || '') }
     ]
-  }
+  },
+  // barcode/QR
+  barcodes: [{
+    format: 'PKBarcodeFormatQR',
+    message: payload,
+    messageEncoding: 'iso-8859-1'
+  }]
 };
 
-// Crea istanza PKPass “da zero”
+// Crea istanza PKPass con proprietà già pronte
 const pass = new PKPass({}, certificates, passProps);
 
-// Aggiunge le immagini (possono essere placeholder, meglio sostituirle in /assets)
+// Assets minimi
 pass.addBuffer('icon.png', fs.readFileSync(path.join(assetsDir, 'icon.png')));
 pass.addBuffer('logo.png', fs.readFileSync(path.join(assetsDir, 'logo.png')));
 
-// Imposta il QR
-pass.setBarcodes([{
-  format: 'PKBarcodeFormatQR',
-  message: payload,
-  messageEncoding: 'iso-8859-1'
-}]);
-
+// Genera buffer e salva
 const fileId = uuidv4();
 const outfile = path.join(passesDir, `${fileId}.pkpass`);
-const buf = await pass.getAsBuffer(); // << importante: getAsBuffer()
+const buf = await pass.getAsBuffer();
 fs.writeFileSync(outfile, buf);
-
 
     // --- GOOGLE SAVE LINK ---
     const androidSaveUrl = await createGoogleSaveUrl(`businesscard-${fileId}`, {
