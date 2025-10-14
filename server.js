@@ -36,9 +36,9 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const APPLE = {
   passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER,
   teamIdentifier: process.env.APPLE_TEAM_IDENTIFIER,
-  p12Path: process.env.APPLE_P12_PATH || './certs/pass.p12',
-  p12Password: process.env.APPLE_P12_PASSWORD,
-  wwdrPath: process.env.APPLE_WWDR_PATH || './certs/wwdr.cer'
+  certPath: process.env.APPLE_CERT_PATH || '/etc/secrets/signerCert.pem',
+  keyPath: process.env.APPLE_KEY_PATH || '/etc/secrets/signerKey.pem',
+  wwdrPath: process.env.APPLE_WWDR_PATH || '/etc/secrets/wwdr.cer'
 };
 
 // --- Google Wallet config ---
@@ -54,9 +54,9 @@ function assertEnv() {
   const missing = [];
   if (!APPLE.passTypeIdentifier) missing.push('APPLE_PASS_TYPE_IDENTIFIER');
   if (!APPLE.teamIdentifier) missing.push('APPLE_TEAM_IDENTIFIER');
-  if (!APPLE.p12Path || !fs.existsSync(APPLE.p12Path)) missing.push('APPLE_P12_PATH (file mancante)');
-  if (!APPLE.p12Password) missing.push('APPLE_P12_PASSWORD');
-  if (!APPLE.wwdrPath || !fs.existsSync(APPLE.wwdrPath)) console.warn('[WARN] APPLE_WWDR_PATH non trovato: alcune librerie potrebbero richiederlo.');
+  if (!APPLE.certPath || !fs.existsSync(APPLE.certPath)) missing.push('APPLE_CERT_PATH (file mancante)');
+  if (!APPLE.keyPath || !fs.existsSync(APPLE.keyPath)) missing.push('APPLE_KEY_PATH (file mancante)');
+  if (!APPLE.wwdrPath || !fs.existsSync(APPLE.wwdrPath)) console.warn('[WARN] APPLE_WWDR_PATH non trovato');
   if (!GOOGLE.issuerId) missing.push('GOOGLE_ISSUER_ID');
   if (!GOOGLE.saEmail) missing.push('GOOGLE_SA_EMAIL');
   if (!GOOGLE.saPrivateKey) missing.push('GOOGLE_SA_PRIVATE_KEY');
@@ -166,9 +166,8 @@ app.post('/create-pass', async (req, res) => {
 // --- APPLE PASS (.pkpass) ---
 const certificates = {
   wwdr: fs.readFileSync(APPLE.wwdrPath),
-  signerCert: fs.readFileSync(APPLE.p12Path),
-  signerKey: fs.readFileSync(APPLE.p12Path),
-  signerKeyPassphrase: APPLE.p12Password
+  signerCert: fs.readFileSync(APPLE.certPath, 'utf8'),
+  signerKey: fs.readFileSync(APPLE.keyPath, 'utf8'),
 };
 
 // helper: normalizza colore in formato accettato da Apple (rgb)
