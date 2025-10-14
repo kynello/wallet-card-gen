@@ -261,13 +261,22 @@ fs.writeFileSync(outfile, buf);
   }
 });
 
-// Serve .pkpass with correct headers
+// Serve .pkpass con header compatibili iOS
 app.get('/download/pkpass/:id', (req, res) => {
   const file = path.join(__dirname, 'passes', `${req.params.id}.pkpass`);
   if (!fs.existsSync(file)) return res.status(404).send('Not found');
+
+  const stat = fs.statSync(file);
+  const buf = fs.readFileSync(file);
+
   res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
-  res.setHeader('Content-Disposition', 'attachment; filename="businesscard.pkpass"');
-  fs.createReadStream(file).pipe(res);
+  // inline aiuta Wallet ad aprirlo direttamente
+  res.setHeader('Content-Disposition', 'inline; filename="businesscard.pkpass"');
+  res.setHeader('Content-Transfer-Encoding', 'binary');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Length', stat.size);
+
+  res.status(200).end(buf);
 });
 
 // Serve assets (logo/icon) statically
