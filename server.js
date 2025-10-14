@@ -237,9 +237,15 @@ pass.setBarcodes({
   messageEncoding: 'iso-8859-1'
 });
 
-// Assets minimi
+// Assets: icon e icon@2x sono importanti
 pass.addBuffer('icon.png', fs.readFileSync(path.join(assetsDir, 'icon.png')));
-pass.addBuffer('logo.png', fs.readFileSync(path.join(assetsDir, 'logo.png')));
+pass.addBuffer('icon@2x.png', fs.readFileSync(path.join(assetsDir, 'icon@2x.png')));
+if (fs.existsSync(path.join(assetsDir, 'logo.png'))) {
+  pass.addBuffer('logo.png', fs.readFileSync(path.join(assetsDir, 'logo.png')));
+}
+if (fs.existsSync(path.join(assetsDir, 'logo@2x.png'))) {
+  pass.addBuffer('logo@2x.png', fs.readFileSync(path.join(assetsDir, 'logo@2x.png')));
+}
 
 // Genera buffer e salva
 const fileId = uuidv4();
