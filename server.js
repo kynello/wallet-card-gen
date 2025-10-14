@@ -115,39 +115,47 @@ function hexToRgbCss(hex) {
 // ──────────────────────────────────────────────────────────────
 // Google: crea/usa la Generic Class e genera il Save Link
 async function ensureGoogleGenericClass(authClient, classId) {
-  const token = await authClient.getAccessToken();
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const urlGet = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`;
 
-  const getUrl = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`;
-  let res = await fetch(getUrl, { headers });
-
-  if (res.status === 200) {
-    console.log('GW → class esiste:', classId);
-    return true;
+  try {
+    // usa il client autenticato della GoogleAuth (niente fetch né header manuali)
+    const r = await authClient.request({ url: urlGet, method: 'GET' });
+    if (r.status === 200) {
+      console.log('GW → class esiste:', classId);
+      return true;
+    }
+  } catch (e) {
+    const status = e?.response?.status;
+    const data = e?.response?.data;
+    console.warn('GW → getClass error:', status, JSON.stringify(data || e.message));
+    if (status !== 404) return false; // 401/403 o altro → abort
   }
 
-  const txtGet = await res.text();
-  console.warn('GW → getClass status:', res.status, txtGet);
+  // Se 404, proviamo a crearla
+  const body = {
+    id: classId,
+    title: 'Business Card',
+    issuerName: 'Your Brand',
+    hexBackgroundColor: '#202020',
+    reviewStatus: 'UNDER_REVIEW'
+  };
 
-  if (res.status === 404) {
-    console.warn('GW → class non trovata, provo a crearla:', classId);
-    const body = {
-      id: classId,
-      title: 'Business Card',
-      issuerName: 'Your Brand',
-      hexBackgroundColor: '#202020',
-      reviewStatus: 'UNDER_REVIEW'
-    };
-    const createUrl = 'https://walletobjects.googleapis.com/walletobjects/v1/genericClass';
-    res = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(body) });
-    const txtCreate = await res.text();
-    console.log('GW → createClass status:', res.status, txtCreate);
-    return res.status === 200;
+  try {
+    const r2 = await authClient.request({
+      url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericClass',
+      method: 'POST',
+      data: body
+    });
+    console.log('GW → createClass status:', r2.status);
+    return r2.status === 200;
+  } catch (e) {
+    const status = e?.response?.status;
+    const data = e?.response?.data;
+    console.warn('GW → createClass error:', status, JSON.stringify(data || e.message));
+    return false;
   }
-
-  // 401/403/altro → di solito permessi dell’SA o issuer sbagliato
-  return false;
 }
+
 
 console.log('GW DIAG → GOOGLE_APPLICATION_CREDENTIALS:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
 console.log('GW DIAG → has JSON file:', fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS || ''));
@@ -164,7 +172,8 @@ async function createGoogleSaveUrl(payloadObjId, person) {
   const auth = new GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
   });
-  const client = await auth.getClient();
+  const client = await auth.getClient(); // <— questo 'client' passalo a ensureGoogleGenericClass
+  const ok = await ensureGoogleGenericClass(client, classId);
   await ensureGoogleGenericClass(client, classId);
 
   const jwtPayload = {
