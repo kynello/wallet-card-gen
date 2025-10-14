@@ -11,7 +11,7 @@ import fs from 'fs';
 try {
   console.log("🔍 Verifica certificati su Render...");
   console.log("/etc/secrets/pass.p12 →", fs.existsSync("/etc/secrets/pass.p12"));
-  console.log("/etc/secrets/wwdr.cer →", fs.existsSync("/etc/secrets/wwdr.pem"));
+  console.log("/etc/secrets/wwdr.pem →", fs.existsSync("/etc/secrets/wwdr.pem"));
   console.log("./certs/pass.p12 →", fs.existsSync("./certs/pass.p12"));
   console.log("./certs/wwdr.pem →", fs.existsSync("./certs/wwdr.pem"));
 } catch (e) {
