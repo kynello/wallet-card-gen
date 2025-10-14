@@ -79,6 +79,8 @@ if (googleCredsPath) {
   try {
     googleCreds = JSON.parse(fs.readFileSync(googleCredsPath, 'utf8'));
     console.log('✅ GOOGLE_CREDENTIALS_PATH letto:', googleCredsPath);
+    // 👉 forza anche l'ENV standard usata da GoogleAuth
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = googleCredsPath;
   } catch (e) {
     console.warn('⚠️ Impossibile leggere/parsare GOOGLE_CREDENTIALS_PATH:', googleCredsPath, e.message);
   }
@@ -147,6 +149,9 @@ async function ensureGoogleGenericClass(authClient, classId) {
   return false;
 }
 
+console.log('GW DIAG → GOOGLE_APPLICATION_CREDENTIALS:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
+console.log('GW DIAG → has JSON file:', fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS || ''));
+console.log('GW DIAG → issuerId:', GOOGLE.issuerId);
 
 async function createGoogleSaveUrl(payloadObjId, person) {
   if (!GOOGLE.issuerId || !GOOGLE.saEmail || !GOOGLE.saPrivateKey) return null;
@@ -157,8 +162,7 @@ async function createGoogleSaveUrl(payloadObjId, person) {
   const objectId = `${GOOGLE.issuerId}.${payloadObjId}`;
 
   const auth = new GoogleAuth({
-    credentials: { client_email: GOOGLE.saEmail, private_key: GOOGLE.saPrivateKey },
-    scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
+  scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
   });
   const client = await auth.getClient();
   await ensureGoogleGenericClass(client, classId);
