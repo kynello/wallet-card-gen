@@ -8,16 +8,65 @@ import jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import fs from 'fs';
 import { execSync } from 'child_process';
-// Debug: verifica se i certificati esistono
-try {
-  console.log("🔍 Verifica certificati su Render...");
-  console.log("/etc/secrets/pass.p12 →", fs.existsSync("/etc/secrets/pass.p12"));
-  console.log("/etc/secrets/wwdr.pem →", fs.existsSync("/etc/secrets/wwdr.pem"));
-  console.log("./certs/pass.p12 →", fs.existsSync("./certs/pass.p12"));
-  console.log("./certs/wwdr.pem →", fs.existsSync("./certs/wwdr.pem"));
-} catch (e) {
-  console.error("Errore controllo certificati:", e);
+
+// --- PATH RESOLVER PER CERTIFICATI ---
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function resolveFirstExisting(paths) {
+  for (const p of paths) {
+    if (!p) continue;
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return null;
 }
+
+// Leggiamo i path da ENV *oppure* dai percorsi standard di Render
+const SIGNER_CERT_PATH = resolveFirstExisting([
+  process.env.SIGNER_CERT_PATH,                     // es. /etc/secrets/signerCert.pem
+  path.join(__dirname, 'certs', 'signerCert.pem'),
+  '/etc/secrets/signerCert.pem'
+]);
+
+const SIGNER_KEY_PATH = resolveFirstExisting([
+  process.env.SIGNER_KEY_PATH,                      // es. /etc/secrets/signerKey.pem
+  path.join(__dirname, 'certs', 'signerKey.pem'),
+  '/etc/secrets/signerKey.pem'
+]);
+
+const WWDR_PATH = resolveFirstExisting([
+  process.env.APPLE_WWDR_PATH,                      // es. /etc/secrets/wwdr.pem  (consigliato PEM)
+  path.join(__dirname, 'certs', 'wwdr.pem'),
+  '/etc/secrets/wwdr.pem',
+  '/etc/secrets/wwdr.cer',
+  path.join(__dirname, 'certs', 'wwdr.cer')
+]);
+
+console.log('🔎 PATHS →',
+  '\n  SIGNER_CERT_PATH:', SIGNER_CERT_PATH,
+  '\n  SIGNER_KEY_PATH :', SIGNER_KEY_PATH,
+  '\n  WWDR_PATH       :', WWDR_PATH
+);
+
+// (Opzionale) DEBUG OpenSSL: esegui solo se trovi il certificato
+try {
+  if (SIGNER_CERT_PATH) {
+    const info = execSync(
+      `openssl x509 -in ${SIGNER_CERT_PATH} -noout -subject -issuer -dates -nameopt RFC2253`
+    ).toString();
+    console.log('=== SIGNER CERT INFO ===\n' + info);
+  } else {
+    console.warn('⚠️ signerCert non trovato: salta debug OpenSSL.');
+  }
+} catch (e) {
+  console.warn('⚠️ OpenSSL debug saltato:', e.message);
+}
+
 
 import { PKPass } from 'passkit-generator';
 
@@ -179,6 +228,10 @@ app.post('/create-pass', async (req, res) => {
       return res.json({ error: 'Compila tutti i campi obbligatori: nome, ruolo, azienda, telefono, email.' });
     }
 
+    if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
+  return res.json({ error: 'Certificati Apple non disponibili lato server. Controlla Secret Files/ENV (vedi log PATHS).' });
+}
+
     // Build QR payload (vCard-like link or URL)
     const payload = JSON.stringify({
       name, role, company, phone, email, website
@@ -196,10 +249,15 @@ try {
 }
    
 // --- APPLE PASS (.pkpass) ---
+// --- CERTIFICATI PER FIRMA PASS ---
+if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
+  console.warn('⚠️ Cert paths mancanti: Apple pass fallirà finché non sono presenti (vedi PATHS sopra).');
+}
+
 const certificates = {
-  wwdr: fs.readFileSync(WWDR_PATH),
-  signerCert: fs.readFileSync(SIGNER_CERT_PATH),
-  signerKey: fs.readFileSync(SIGNER_KEY_PATH)
+  wwdr: WWDR_PATH ? fs.readFileSync(WWDR_PATH) : null,
+  signerCert: SIGNER_CERT_PATH ? fs.readFileSync(SIGNER_CERT_PATH) : null,
+  signerKey: SIGNER_KEY_PATH ? fs.readFileSync(SIGNER_KEY_PATH) : null
 };
 
 // helper: normalizza colore in formato accettato da Apple (rgb)
