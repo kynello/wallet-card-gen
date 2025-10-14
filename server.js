@@ -138,7 +138,9 @@ async function ensureGoogleGenericClass(authClient, classId) {
 async function createGoogleSaveUrl(payloadObjId, person) {
   if (!GOOGLE.issuerId || !GOOGLE.saEmail || !GOOGLE.saPrivateKey) return null;
 
+  console.log('GW → issuerId:', GOOGLE.issuerId, 'classSuffix:', GOOGLE.classSuffix);
   const classId = `${GOOGLE.issuerId}.${GOOGLE.classSuffix}`;
+  console.log('GW → classId:', classId);
   const objectId = `${GOOGLE.issuerId}.${payloadObjId}`;
 
   const auth = new GoogleAuth({
