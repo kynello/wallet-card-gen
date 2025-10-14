@@ -42,12 +42,30 @@ const APPLE = {
 };
 
 // --- Google Wallet config ---
-const GOOGLE = {
+let GOOGLE = {
   issuerId: process.env.GOOGLE_ISSUER_ID,
   classSuffix: process.env.GOOGLE_CLASS_SUFFIX || 'businesscard',
-  saEmail: process.env.GOOGLE_SA_EMAIL,
-  saPrivateKey: (process.env.GOOGLE_SA_PRIVATE_KEY || '').replace(/\\n/g, '\n')
+  saEmail: '',
+  saPrivateKey: ''
 };
+
+// Leggi credenziali Google da Secret File
+const googleSaPath = '/etc/secrets/google-sa-key.json';
+if (fs.existsSync(googleSaPath)) {
+  try {
+    const saFile = JSON.parse(fs.readFileSync(googleSaPath, 'utf8'));
+    GOOGLE.saEmail = saFile.client_email;
+    GOOGLE.saPrivateKey = saFile.private_key;
+    console.log('✅ Credenziali Google caricate da Secret File');
+  } catch (e) {
+    console.error('❌ Errore lettura google-sa-key.json:', e);
+  }
+} else {
+  // Fallback alle variabili d'ambiente
+  GOOGLE.saEmail = process.env.GOOGLE_SA_EMAIL;
+  GOOGLE.saPrivateKey = (process.env.GOOGLE_SA_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  console.log('⚠️ Google SA key da variabili d\'ambiente (considera di usare Secret File)');
+}
 
 // Simple validation check
 function assertEnv() {
@@ -113,7 +131,10 @@ async function createGoogleSaveUrl(payloadObjId, person) {
   const objectId = `${GOOGLE.issuerId}.${payloadObjId}`;
 
   const auth = new GoogleAuth({
-    credentials: { client_email: GOOGLE.saEmail, private_key: GOOGLE.saPrivateKey },
+    credentials: { 
+      client_email: GOOGLE.saEmail, 
+      private_key: GOOGLE.saPrivateKey 
+    },
     scopes: ['https://www.googleapis.com/auth/wallet_object.issuer']
   });
   const client = await auth.getClient();
