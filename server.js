@@ -161,6 +161,47 @@ console.log('GW DIAG → GOOGLE_APPLICATION_CREDENTIALS:', process.env.GOOGLE_AP
 console.log('GW DIAG → has JSON file:', fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS || ''));
 console.log('GW DIAG → issuerId:', GOOGLE.issuerId);
 
+// Crea o “upserta” un Generic Object prima di generare il link di salvataggio
+async function createOrUpsertGenericObject(authClient, classId, objectId, person) {
+  const data = {
+    id: objectId,
+    classId,
+    hexBackgroundColor: '#202020',
+    header:    { defaultValue: { language: 'it', value: person.name || '' } },
+    subheader: { defaultValue: { language: 'it', value: person.role || '' } },
+    cardTitle: { defaultValue: { language: 'it', value: person.company || 'Business Card' } },
+    barcode: { type: 'QR_CODE', value: person.qrPayload || 'N/A' },
+    textModulesData: [
+      { header: 'Telefono', body: person.phone || '' },
+      { header: 'Email',    body: person.email || ''  },
+      { header: 'Sito',     body: person.website || '' }
+    ]
+    // ⚠️ Per ora niente immagini per evitare errori (riattiva dopo che tutto funziona)
+    // ,heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
+    // ,logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } }
+  };
+
+  try {
+    const r = await authClient.request({
+      url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',
+      method: 'POST',
+      data
+    });
+    console.log('GW → insertObject status:', r.status);
+    return true;
+  } catch (e) {
+    const status = e?.response?.status;
+    const msg = e?.response?.data || e?.message;
+    if (status === 409) { // già esiste → va bene
+      console.log('GW → object già esistente:', objectId);
+      return true;
+    }
+    console.warn('GW → insertObject error:', status, JSON.stringify(msg));
+    return false;
+  }
+}
+
+
 async function createGoogleSaveUrl(payloadObjId, person) {
   if (!GOOGLE.issuerId || !GOOGLE.saEmail || !GOOGLE.saPrivateKey) return null;
 
