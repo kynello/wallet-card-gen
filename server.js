@@ -372,13 +372,21 @@ app.post('/create-pass', async (req, res) => {
       { key: 'qr_info', label: 'SCANSIONA IL QR', value: 'Inquadra il codice QR per salvare il contatto' }
     );
 
-    // Barcode nel pass (usa vCard) - Apple lo mostra automaticamente in basso
-    pass.setBarcodes([{
+    // Barcode nel pass (usa vCard) - impostazione diretta sulla proprietà
+    pass.barcode = {
       format: 'PKBarcodeFormatQR',
       message: vCard,
       messageEncoding: 'iso-8859-1',
-      altText: 'Scansiona per salvare il contatto' // Testo alternativo sotto il QR
-    }]);
+      altText: 'Scansiona per salvare il contatto'
+    };
+    
+    // Per retrocompatibilità con iOS vecchi, aggiungi anche barcodes array
+    pass.barcodes = [{
+      format: 'PKBarcodeFormatQR',
+      message: vCard,
+      messageEncoding: 'iso-8859-1',
+      altText: 'Scansiona per salvare il contatto'
+    }];
 
     // Asset obbligatori
     const icon1 = path.join(assetsDir, 'icon.png');
