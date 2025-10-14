@@ -9,6 +9,8 @@ import jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import fs from 'fs';
 import { PKPass } from 'passkit-generator';
+import multer from 'multer';
+import sharp from 'sharp';
 
 dotenv.config();
 
@@ -29,20 +31,42 @@ function resolveFirstExisting(paths) {
 // Cartelle utili
 const passesDir = path.join(__dirname, 'passes');
 const assetsDir = path.join(__dirname, 'assets');
+const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(passesDir)) fs.mkdirSync(passesDir, { recursive: true });
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+// Configurazione Multer per upload logo
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const uniqueName = `logo-${uuidv4()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  }
+});
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // Max 2MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo immagini ammesse'));
+    }
+  }
+});
 
 // ──────────────────────────────────────────────────────────────
 // ENV base
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Apple IDs (DEV: devono combaciare con il certificato!)
+// Apple IDs
 const APPLE = {
   passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER,
   teamIdentifier: process.env.APPLE_TEAM_IDENTIFIER,
 };
 
-// Risolvi i path dei certificati (usa ENV o Secret Files noti)
+// Risolvi i path dei certificati
 const SIGNER_CERT_PATH = resolveFirstExisting([
   process.env.SIGNER_CERT_PATH,
   path.join(__dirname, 'certs', 'signerCert.pem'),
@@ -117,6 +141,85 @@ function hexToRgbCss(hex) {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Helper: genera vCard con supporto multiplo per telefoni e indirizzi
+function generateVCard(data) {
+  const lines = [
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    `FN:${data.name}`,
+    `ORG:${data.company}`,
+    `TITLE:${data.role}`
+  ];
+
+  // Aggiungi telefoni (supporto multiplo)
+  if (data.phones && Array.isArray(data.phones)) {
+    data.phones.forEach(phone => {
+      if (phone.number) {
+        const type = phone.type || 'WORK';
+        lines.push(`TEL;TYPE=${type},VOICE:${phone.number}`);
+      }
+    });
+  }
+
+  // Email
+  if (data.email) {
+    lines.push(`EMAIL;TYPE=INTERNET:${data.email}`);
+  }
+
+  // Indirizzi (supporto multiplo)
+  if (data.addresses && Array.isArray(data.addresses)) {
+    data.addresses.forEach(addr => {
+      if (addr.street || addr.city || addr.zip || addr.country) {
+        // Formato: ADR;TYPE=WORK:;;street;city;state;zip;country
+        const adrLine = `ADR;TYPE=${addr.type || 'WORK'}:;;${addr.street || ''};${addr.city || ''};${addr.state || ''};${addr.zip || ''};${addr.country || ''}`;
+        lines.push(adrLine);
+      }
+    });
+  }
+
+  // Website
+  if (data.website) {
+    lines.push(`URL:${data.website}`);
+  }
+
+  lines.push('END:VCARD');
+  return lines.join('\r\n');
+}
+
+// Helper: processa logo aziendale per Apple Wallet (icona e logo)
+async function processCompanyLogo(logoPath, outputDir) {
+  try {
+    // Genera icon.png (29x29) e icon@2x.png (58x58)
+    await sharp(logoPath)
+      .resize(29, 29, { fit: 'cover' })
+      .png()
+      .toFile(path.join(outputDir, 'icon.png'));
+    
+    await sharp(logoPath)
+      .resize(58, 58, { fit: 'cover' })
+      .png()
+      .toFile(path.join(outputDir, 'icon@2x.png'));
+
+    // Genera logo.png (160x50) e logo@2x.png (320x100)
+    await sharp(logoPath)
+      .resize(160, 50, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(path.join(outputDir, 'logo.png'));
+    
+    await sharp(logoPath)
+      .resize(320, 100, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(path.join(outputDir, 'logo@2x.png'));
+
+    console.log('✅ Logo processato per Apple Wallet');
+    return true;
+  } catch (e) {
+    console.error('❌ Errore processamento logo:', e.message);
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
 // Google: crea/usa la Generic Class
 async function ensureGoogleGenericClass(authClient, classId) {
   const urlGet = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${encodeURIComponent(classId)}`;
@@ -170,6 +273,44 @@ async function ensureGoogleGenericClass(authClient, classId) {
 async function createOrUpsertGenericObject(authClient, classId, objectId, person) {
   console.log('GW → Creo/aggiorno object:', objectId);
 
+  // Prepara textModulesData con telefoni e indirizzi
+  const textModules = [];
+  
+  // Telefoni
+  if (person.phones && Array.isArray(person.phones)) {
+    person.phones.forEach(phone => {
+      if (phone.number) {
+        textModules.push({
+          header: phone.type || 'Telefono',
+          body: phone.number
+        });
+      }
+    });
+  }
+
+  // Email
+  if (person.email) {
+    textModules.push({ header: 'Email', body: person.email });
+  }
+
+  // Indirizzi
+  if (person.addresses && Array.isArray(person.addresses)) {
+    person.addresses.forEach(addr => {
+      if (addr.street || addr.city) {
+        const fullAddr = [addr.street, addr.city, addr.zip, addr.country].filter(x => x).join(', ');
+        textModules.push({
+          header: addr.type || 'Indirizzo',
+          body: fullAddr
+        });
+      }
+    });
+  }
+
+  // Sito
+  if (person.website) {
+    textModules.push({ header: 'Sito', body: person.website });
+  }
+
   const data = {
     id: objectId,
     classId,
@@ -178,14 +319,7 @@ async function createOrUpsertGenericObject(authClient, classId, objectId, person
     subheader: { defaultValue: { language: 'it', value: person.role || '' } },
     cardTitle: { defaultValue: { language: 'it', value: person.company || 'Business Card' } },
     barcode: { type: 'QR_CODE', value: person.qrPayload || 'N/A' },
-    textModulesData: [
-      { header: 'Telefono', body: person.phone || '' },
-      { header: 'Email',    body: person.email || ''  },
-      { header: 'Sito',     body: person.website || '' }
-    ]
-    // ⚠️ Immagini temporaneamente disabilitate per debug
-    // heroImage: { sourceUri: { uri: `${BASE_URL}/assets/icon.png` } },
-    // logo:      { sourceUri: { uri: `${BASE_URL}/assets/logo.png` } }
+    textModulesData: textModules
   };
 
   try {
@@ -202,7 +336,6 @@ async function createOrUpsertGenericObject(authClient, classId, objectId, person
     
     if (status === 409) {
       console.log('⚠️ GW → Object già esistente, tento update...');
-      // Prova update
       try {
         const r2 = await authClient.request({
           url: `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${encodeURIComponent(objectId)}`,
@@ -230,40 +363,26 @@ async function createGoogleSaveUrl(payloadObjId, person) {
   }
 
   console.log('🚀 GW → Inizio generazione Save URL');
-  console.log('GW → issuerId:', GOOGLE.issuerId);
-  console.log('GW → classSuffix:', GOOGLE.classSuffix);
-  
   const classId = `${GOOGLE.issuerId}.${GOOGLE.classSuffix}`;
   const objectId = `${GOOGLE.issuerId}.${payloadObjId}`;
-  
-  console.log('GW → classId completo:', classId);
-  console.log('GW → objectId completo:', objectId);
 
   try {
-    // 1. Autentica
-    console.log('GW → Step 1: Autenticazione...');
     const auth = new GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
     });
     const client = await auth.getClient();
     console.log('✅ GW → Autenticazione completata');
     
-    // 2. Assicurati che la classe esista
-    console.log('GW → Step 2: Verifica/Creazione classe...');
     const classOk = await ensureGoogleGenericClass(client, classId);
     if (!classOk) {
       throw new Error('Impossibile creare/verificare la classe Google Wallet');
     }
     
-    // 3. Crea l'object
-    console.log('GW → Step 3: Creazione/Update object...');
     const objectOk = await createOrUpsertGenericObject(client, classId, objectId, person);
     if (!objectOk) {
       throw new Error('Impossibile creare/aggiornare l\'object Google Wallet');
     }
 
-    // 4. Genera il JWT
-    console.log('GW → Step 4: Generazione JWT...');
     const jwtPayload = {
       iss: GOOGLE.saEmail,
       aud: 'google',
@@ -278,66 +397,74 @@ async function createGoogleSaveUrl(payloadObjId, person) {
     const saveUrl = `https://pay.google.com/gp/v/save/${token}`;
     
     console.log('✅ GW → Save URL generato con successo');
-    console.log('GW → URL:', saveUrl.substring(0, 80) + '...');
-    
     return saveUrl;
     
   } catch (error) {
-    console.error('❌ GW → Errore durante generazione Save URL:');
-    console.error('   Messaggio:', error.message);
-    console.error('   Stack:', error.stack);
+    console.error('❌ GW → Errore durante generazione Save URL:', error.message);
     throw error;
   }
 }
+
+// ──────────────────────────────────────────────────────────────
+// Upload logo endpoint
+app.post('/upload-logo', upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nessun file caricato' });
+    }
+
+    const logoPath = req.file.path;
+    const logoUrl = `${BASE_URL}/uploads/${req.file.filename}`;
+    
+    console.log('📤 Logo caricato:', logoUrl);
+    
+    return res.json({ 
+      success: true, 
+      logoPath: req.file.filename,
+      logoUrl 
+    });
+  } catch (err) {
+    console.error('❌ Errore upload logo:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // ──────────────────────────────────────────────────────────────
 // Crea pass per entrambe le piattaforme
 app.post('/create-pass', async (req, res) => {
   try {
     const {
-      name, role, company, phone, email, website,
-      brandColor = '#202020', logoText = 'Business Card'
+      name, role, company, email, website,
+      phones = [],        // Array di {type, number}
+      addresses = [],     // Array di {type, street, city, zip, state, country}
+      logoPath,           // Nome file logo caricato (opzionale)
+      brandColor = '#202020', 
+      logoText = 'Business Card'
     } = req.body || {};
 
     console.log('📝 Richiesta creazione pass per:', name);
+    console.log('📞 Telefoni:', phones);
+    console.log('📍 Indirizzi:', addresses);
 
-    if (!name || !role || !company || !phone || !email) {
-      return res.json({ error: 'Compila nome, ruolo, azienda, telefono, email.' });
+    if (!name || !role || !company || !email) {
+      return res.json({ error: 'Compila almeno nome, ruolo, azienda ed email.' });
+    }
+    if (!phones || phones.length === 0) {
+      return res.json({ error: 'Aggiungi almeno un numero di telefono.' });
     }
     if (!APPLE.passTypeIdentifier || !APPLE.teamIdentifier) {
-      return res.json({ error: 'Config Apple mancante: APPLE_PASS_TYPE_IDENTIFIER / APPLE_TEAM_IDENTIFIER.' });
+      return res.json({ error: 'Config Apple mancante.' });
     }
 
-    // QR con formato vCard per salvare il contatto
-    // Usa \r\n invece di \n per compatibilità vCard standard
-    const vCard = [
-      'BEGIN:VCARD',
-      'VERSION:3.0',
-      `FN:${name}`,
-      `ORG:${company}`,
-      `TITLE:${role}`,
-      `TEL;TYPE=WORK,VOICE:${phone}`,
-      `EMAIL;TYPE=INTERNET:${email}`,
-      website ? `URL:${website}` : '',
-      'END:VCARD'
-    ].filter(line => line).join('\r\n');
-    
-    // TEST: prova con messaggio semplice per debug
-    const testMessage = `${name} - ${company}`;
-    console.log('📇 vCard generato:', vCard);
-    console.log('🧪 Test message:', testMessage);
-    
-    // Genera QR sia come DataURL che come Buffer per il pass
-    const qrDataUrl = await QRCode.toDataURL(vCard);
-    const qrBuffer = await QRCode.toBuffer(vCard, {
-      errorCorrectionLevel: 'M',
-      type: 'png',
-      width: 300
-    });
+    // Genera vCard con tutti i dati
+    const vCard = generateVCard({ name, role, company, email, website, phones, addresses });
+    console.log('📇 vCard generato');
 
-    // Verifica presenza cert Apple
+    const qrDataUrl = await QRCode.toDataURL(vCard);
+
+    // Verifica certificati Apple
     if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
-      return res.json({ error: 'Certificati Apple non disponibili lato server. Controlla Secret Files/ENV (vedi log PATHS).' });
+      return res.json({ error: 'Certificati Apple non disponibili.' });
     }
 
     console.log('🍎 Generazione Apple Pass...');
@@ -360,7 +487,6 @@ app.post('/create-pass', async (req, res) => {
       labelColor: 'rgb(255,255,255)',
       foregroundColor: 'rgb(255,255,255)',
       logoText,
-      // Aggiungi il barcode direttamente qui nella configurazione iniziale
       barcode: {
         message: vCard,
         format: 'PKBarcodeFormatQR',
@@ -373,68 +499,100 @@ app.post('/create-pass', async (req, res) => {
       }]
     });
 
-    // tipo e campi
+    // Campi del pass
     pass.type = 'generic';
     pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
     pass.secondaryFields.push(
       { key: 'role', label: 'RUOLO', value: String(role) },
       { key: 'company', label: 'AZIENDA', value: String(company) }
     );
-    pass.auxiliaryFields.push(
-      { key: 'phone', label: 'TELEFONO', value: String(phone) },
-      { key: 'email', label: 'EMAIL', value: String(email) }
-    );
-    pass.backFields.push(
-      { key: 'website', label: 'SITO', value: String(website || '') },
-      { key: 'qr_info', label: 'SCANSIONA IL QR', value: 'Inquadra il codice QR per salvare il contatto' }
-    );
 
-    // Barcode nel pass - usa il metodo della libreria
-    const useVCard = true;
-    const barcodeMessage = useVCard ? vCard : testMessage;
-    
-    console.log('🔲 Impostazione barcode...');
-    console.log('📏 Message length:', barcodeMessage.length);
-    console.log('📝 Message preview:', barcodeMessage.substring(0, 50) + '...');
-    
-    try {
-      // Prova a impostare il barcode usando il metodo della libreria
-      pass.setBarcodes({
-        message: barcodeMessage,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
+    // Mostra primo telefono e email negli auxiliary fields
+    if (phones[0]) {
+      pass.auxiliaryFields.push({ 
+        key: 'phone', 
+        label: phones[0].type || 'TELEFONO', 
+        value: String(phones[0].number) 
       });
-      console.log('✅ Barcode impostato con successo');
-    } catch (e) {
-      console.error('❌ Errore impostazione barcode:', e.message);
-      // Fallback: prova a impostarlo direttamente nel pass.json prima della generazione
-      pass._fields = pass._fields || {};
-      pass._fields.barcode = {
-        message: barcodeMessage,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
-      };
-      pass._fields.barcodes = [{
-        message: barcodeMessage,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
-      }];
+    }
+    pass.auxiliaryFields.push({ key: 'email', label: 'EMAIL', value: String(email) });
+
+    // Back fields: altri telefoni, indirizzi, sito
+    if (phones.length > 1) {
+      phones.slice(1).forEach((phone, idx) => {
+        pass.backFields.push({
+          key: `phone_${idx + 2}`,
+          label: phone.type || 'TELEFONO',
+          value: String(phone.number)
+        });
+      });
     }
 
-    // Asset obbligatori
-    const icon1 = path.join(assetsDir, 'icon.png');
-    const icon2 = path.join(assetsDir, 'icon@2x.png');
-    if (fs.existsSync(icon1)) pass.addBuffer('icon.png', fs.readFileSync(icon1));
-    if (fs.existsSync(icon2)) pass.addBuffer('icon@2x.png', fs.readFileSync(icon2));
-    const logo1 = path.join(assetsDir, 'logo.png');
-    const logo2 = path.join(assetsDir, 'logo@2x.png');
-    if (fs.existsSync(logo1)) pass.addBuffer('logo.png', fs.readFileSync(logo1));
-    if (fs.existsSync(logo2)) pass.addBuffer('logo@2x.png', fs.readFileSync(logo2));
+    if (addresses.length > 0) {
+      addresses.forEach((addr, idx) => {
+        const fullAddr = [addr.street, addr.city, addr.zip, addr.country].filter(x => x).join(', ');
+        pass.backFields.push({
+          key: `address_${idx + 1}`,
+          label: addr.type || 'INDIRIZZO',
+          value: fullAddr
+        });
+      });
+    }
 
+    if (website) {
+      pass.backFields.push({ key: 'website', label: 'SITO', value: String(website) });
+    }
+
+    pass.backFields.push({ 
+      key: 'qr_info', 
+      label: 'QR CODE', 
+      value: 'Scansiona il codice QR per salvare il contatto nella rubrica' 
+    });
+
+    // Processa logo aziendale se fornito
     const fileId = uuidv4();
+    const tempLogoDir = path.join(uploadsDir, `temp-${fileId}`);
+    fs.mkdirSync(tempLogoDir, { recursive: true });
+
+    if (logoPath) {
+      const uploadedLogoPath = path.join(uploadsDir, logoPath);
+      if (fs.existsSync(uploadedLogoPath)) {
+        await processCompanyLogo(uploadedLogoPath, tempLogoDir);
+        
+        // Aggiungi le immagini processate al pass
+        const icon1 = path.join(tempLogoDir, 'icon.png');
+        const icon2 = path.join(tempLogoDir, 'icon@2x.png');
+        const logo1 = path.join(tempLogoDir, 'logo.png');
+        const logo2 = path.join(tempLogoDir, 'logo@2x.png');
+        
+        if (fs.existsSync(icon1)) pass.addBuffer('icon.png', fs.readFileSync(icon1));
+        if (fs.existsSync(icon2)) pass.addBuffer('icon@2x.png', fs.readFileSync(icon2));
+        if (fs.existsSync(logo1)) pass.addBuffer('logo.png', fs.readFileSync(logo1));
+        if (fs.existsSync(logo2)) pass.addBuffer('logo@2x.png', fs.readFileSync(logo2));
+      }
+    } else {
+      // Usa logo di default se presente
+      const icon1 = path.join(assetsDir, 'icon.png');
+      const icon2 = path.join(assetsDir, 'icon@2x.png');
+      const logo1 = path.join(assetsDir, 'logo.png');
+      const logo2 = path.join(assetsDir, 'logo@2x.png');
+      
+      if (fs.existsSync(icon1)) pass.addBuffer('icon.png', fs.readFileSync(icon1));
+      if (fs.existsSync(icon2)) pass.addBuffer('icon@2x.png', fs.readFileSync(icon2));
+      if (fs.existsSync(logo1)) pass.addBuffer('logo.png', fs.readFileSync(logo1));
+      if (fs.existsSync(logo2)) pass.addBuffer('logo@2x.png', fs.readFileSync(logo2));
+    }
+
+    console.log('✅ Pass configurato completamente');
+
     const outfile = path.join(passesDir, `${fileId}.pkpass`);
     const buf = await pass.getAsBuffer();
     fs.writeFileSync(outfile, buf);
+
+    // Pulizia file temporanei
+    if (fs.existsSync(tempLogoDir)) {
+      fs.rmSync(tempLogoDir, { recursive: true, force: true });
+    }
 
     console.log('✅ Apple Pass creato:', fileId);
 
@@ -445,21 +603,15 @@ app.post('/create-pass', async (req, res) => {
     console.log('🤖 Generazione Google Wallet...');
     try {
       androidSaveUrl = await createGoogleSaveUrl(`businesscard-${fileId}`, {
-        name, role, company, phone, email, website, qrPayload: vCard
+        name, role, company, email, website, phones, addresses, qrPayload: vCard
       });
-      console.log('✅ Google Wallet URL generato con successo');
+      console.log('✅ Google Wallet URL generato');
     } catch (e) {
       androidError = e.message;
       console.error('❌ Google Wallet errore:', e.message);
-      console.error('Stack:', e.stack);
     }
 
     const iosDownloadUrl = `${BASE_URL}/download/pkpass/${fileId}`;
-    
-    console.log('📦 Risposta finale:');
-    console.log('  iOS URL:', iosDownloadUrl);
-    console.log('  Android URL:', androidSaveUrl ? '✓' : '✗');
-    console.log('  Android Error:', androidError || 'nessuno');
 
     return res.json({ 
       iosDownloadUrl, 
@@ -470,20 +622,18 @@ app.post('/create-pass', async (req, res) => {
 
   } catch (err) {
     console.error('❌ ERR /create-pass:', err);
-    console.error('Stack:', err.stack);
-    return res.json({ error: `Errore durante la generazione del pass: ${err?.message || 'unknown'}` });
+    return res.json({ error: `Errore: ${err?.message || 'unknown'}` });
   }
 });
 
 // ──────────────────────────────────────────────────────────────
-// Download .pkpass con header compatibili iOS
+// Download .pkpass
 app.get('/download/pkpass/:id', (req, res) => {
   const file = path.join(passesDir, `${req.params.id}.pkpass`);
   if (!fs.existsSync(file)) return res.status(404).send('Not found');
 
   const stat = fs.statSync(file);
   const buf = fs.readFileSync(file);
-  console.log(`[PKPASS] Serving ${path.basename(file)}, size=${stat.size} bytes`);
 
   res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
   res.setHeader('Content-Disposition', 'inline; filename="businesscard.pkpass"');
@@ -495,6 +645,7 @@ app.get('/download/pkpass/:id', (req, res) => {
 
 // ──────────────────────────────────────────────────────────────
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
+app.use('/uploads', express.static(uploadsDir));
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
