@@ -308,9 +308,20 @@ app.post('/create-pass', async (req, res) => {
       return res.json({ error: 'Config Apple mancante: APPLE_PASS_TYPE_IDENTIFIER / APPLE_TEAM_IDENTIFIER.' });
     }
 
-    // QR con payload "biglietto"
-    const payload = JSON.stringify({ name, role, company, phone, email, website });
-    const qrDataUrl = await QRCode.toDataURL(payload);
+    // QR con formato vCard per salvare il contatto
+    const vCard = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${name}`,
+      `ORG:${company}`,
+      `TITLE:${role}`,
+      `TEL;TYPE=WORK,VOICE:${phone}`,
+      `EMAIL;TYPE=INTERNET:${email}`,
+      website ? `URL:${website}` : '',
+      'END:VCARD'
+    ].filter(line => line).join('\n');
+    
+    const qrDataUrl = await QRCode.toDataURL(vCard);
 
     // Verifica presenza cert Apple
     if (!SIGNER_CERT_PATH || !SIGNER_KEY_PATH || !WWDR_PATH) {
@@ -352,9 +363,10 @@ app.post('/create-pass', async (req, res) => {
     );
     pass.backFields.push({ key: 'website', label: 'SITO', value: String(website || '') });
 
+    // Barcode nel pass (usa vCard)
     pass.setBarcodes([{
       format: 'PKBarcodeFormatQR',
-      message: payload,
+      message: vCard,
       messageEncoding: 'iso-8859-1'
     }]);
 
@@ -382,7 +394,7 @@ app.post('/create-pass', async (req, res) => {
     console.log('🤖 Generazione Google Wallet...');
     try {
       androidSaveUrl = await createGoogleSaveUrl(`businesscard-${fileId}`, {
-        name, role, company, phone, email, website, qrPayload: payload
+        name, role, company, phone, email, website, qrPayload: vCard
       });
       console.log('✅ Google Wallet URL generato con successo');
     } catch (e) {
