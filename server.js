@@ -309,6 +309,7 @@ app.post('/create-pass', async (req, res) => {
     }
 
     // QR con formato vCard per salvare il contatto
+    // Usa \r\n invece di \n per compatibilità vCard standard
     const vCard = [
       'BEGIN:VCARD',
       'VERSION:3.0',
@@ -319,7 +320,12 @@ app.post('/create-pass', async (req, res) => {
       `EMAIL;TYPE=INTERNET:${email}`,
       website ? `URL:${website}` : '',
       'END:VCARD'
-    ].filter(line => line).join('\n');
+    ].filter(line => line).join('\r\n');
+    
+    // TEST: prova con messaggio semplice per debug
+    const testMessage = `${name} - ${company}`;
+    console.log('📇 vCard generato:', vCard);
+    console.log('🧪 Test message:', testMessage);
     
     // Genera QR sia come DataURL che come Buffer per il pass
     const qrDataUrl = await QRCode.toDataURL(vCard);
@@ -372,21 +378,23 @@ app.post('/create-pass', async (req, res) => {
       { key: 'qr_info', label: 'SCANSIONA IL QR', value: 'Inquadra il codice QR per salvare il contatto' }
     );
 
-    // Barcode nel pass (usa vCard) - impostazione diretta sulla proprietà
-    pass.barcode = {
+    // Barcode nel pass - prova PRIMA con messaggio semplice per test
+    // Se funziona con testMessage ma non con vCard, il problema è il formato vCard
+    const useVCard = true; // Cambia a false per testare con messaggio semplice
+    const barcodeMessage = useVCard ? vCard : testMessage;
+    
+    const barcodeConfig = {
       format: 'PKBarcodeFormatQR',
-      message: vCard,
-      messageEncoding: 'iso-8859-1',
-      altText: 'Scansiona per salvare il contatto'
+      message: barcodeMessage,
+      messageEncoding: 'iso-8859-1'
     };
     
-    // Per retrocompatibilità con iOS vecchi, aggiungi anche barcodes array
-    pass.barcodes = [{
-      format: 'PKBarcodeFormatQR',
-      message: vCard,
-      messageEncoding: 'iso-8859-1',
-      altText: 'Scansiona per salvare il contatto'
-    }];
+    console.log('🔲 Barcode config:', JSON.stringify(barcodeConfig, null, 2));
+    console.log('📏 Message length:', barcodeMessage.length);
+    
+    // Imposta sia barcode che barcodes per massima compatibilità
+    pass.barcode = barcodeConfig;
+    pass.barcodes = [barcodeConfig];
 
     // Asset obbligatori
     const icon1 = path.join(assetsDir, 'icon.png');
