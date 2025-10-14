@@ -197,9 +197,9 @@ try {
    
 // --- APPLE PASS (.pkpass) ---
 const certificates = {
-  wwdr: fs.readFileSync(APPLE.wwdrPath),
-  signerCert: fs.readFileSync(APPLE.certPath, 'utf8'),
-  signerKey: fs.readFileSync(APPLE.keyPath, 'utf8'),
+  wwdr: fs.readFileSync(WWDR_PATH),
+  signerCert: fs.readFileSync(SIGNER_CERT_PATH),
+  signerKey: fs.readFileSync(SIGNER_KEY_PATH)
 };
 
 // helper: normalizza colore in formato accettato da Apple (rgb)
