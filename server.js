@@ -183,44 +183,39 @@ function hexToRgbCss(hex) {
   } catch { return 'rgb(32,32,32)'; }
 }
 
-const passProps = {
-  formatVersion: 1,
-  description: 'Business Card',
-  organizationName: company,
-  teamIdentifier: APPLE.teamIdentifier,
-  passTypeIdentifier: APPLE.passTypeIdentifier,
-  serialNumber: uuidv4(),
-backgroundColor: hexToRgbCss(brandColor || '#202020'),
-  labelColor: 'rgb(255,255,255)',
-  foregroundColor: 'rgb(255,255,255)',
-  logoText: logoText,
-  // sezione "generic" con i campi
-  generic: {
-    primaryFields: [
-      { key: 'name', label: 'NOME', value: String(name) }
-    ],
-    secondaryFields: [
-      { key: 'role', label: 'RUOLO', value: String(role) },
-      { key: 'company', label: 'AZIENDA', value: String(company) }
-    ],
-    auxiliaryFields: [
-      { key: 'phone', label: 'TELEFONO', value: String(phone) },
-      { key: 'email', label: 'EMAIL', value: String(email) }
-    ],
-    backFields: [
-      { key: 'website', label: 'SITO', value: String(website || '') }
-    ]
-  },
-  // barcode/QR
-  barcodes: [{
-    format: 'PKBarcodeFormatQR',
-    message: payload,
-    messageEncoding: 'iso-8859-1'
-  }]
-};
+// Crea istanza PKPass - PRIMA SOLO I CERTIFICATI
+const pass = new PKPass({}, certificates);
 
-// Crea istanza PKPass con proprietà già pronte
-const pass = new PKPass({}, certificates, passProps);
+// POI imposta le proprietà del pass
+pass.type = 'generic';
+pass.serialNumber = uuidv4();
+pass.description = 'Business Card';
+pass.organizationName = company;
+pass.passTypeIdentifier = APPLE.passTypeIdentifier;
+pass.teamIdentifier = APPLE.teamIdentifier;
+pass.backgroundColor = hexToRgbCss(brandColor || '#202020');
+pass.labelColor = 'rgb(255,255,255)';
+pass.foregroundColor = 'rgb(255,255,255)';
+pass.logoText = logoText;
+
+// Aggiungi i campi
+pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
+pass.secondaryFields.push(
+  { key: 'role', label: 'RUOLO', value: String(role) },
+  { key: 'company', label: 'AZIENDA', value: String(company) }
+);
+pass.auxiliaryFields.push(
+  { key: 'phone', label: 'TELEFONO', value: String(phone) },
+  { key: 'email', label: 'EMAIL', value: String(email) }
+);
+pass.backFields.push({ key: 'website', label: 'SITO', value: String(website || '') });
+
+// Aggiungi barcode
+pass.setBarcodes({
+  message: payload,
+  format: 'PKBarcodeFormatQR',
+  messageEncoding: 'iso-8859-1'
+});
 
 // Assets minimi
 pass.addBuffer('icon.png', fs.readFileSync(path.join(assetsDir, 'icon.png')));
