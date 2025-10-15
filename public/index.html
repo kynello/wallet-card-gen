@@ -81,7 +81,7 @@
       <div>
         <label>Testo logo (sul pass)</label>
         <input name="logoText" id="logoText" value="Business Card"/>
-        <div class="hint">Usato solo se NON carichi un logo aziendale</div>
+        <div class="hint">Lascia vuoto o usa lo stesso colore dello sfondo per nasconderlo</div>
       </div>
     </div>
     <div class="row">
@@ -96,6 +96,11 @@
         <div class="hint">Colore per i valori (nome, azienda, ecc.)</div>
       </div>
     </div>
+    
+    <label>
+      <input type="checkbox" id="hideLogoText" onchange="toggleLogoTextVisibility()"/> 
+      Nascondi testo logo (mostra solo immagine)
+    </label>
 
     <div class="actions">
       <button type="submit">🚀 Genera Pass</button>
@@ -108,6 +113,23 @@
     let uploadedLogoPath = null;
     let phoneCount = 0;
     let addressCount = 0;
+
+    // Funzione per nascondere il logoText usando il colore dello sfondo
+    function toggleLogoTextVisibility() {
+      const hideCheckbox = document.getElementById('hideLogoText');
+      const logoTextInput = document.getElementById('logoText');
+      
+      if (hideCheckbox.checked) {
+        // Nascondi mettendo uno spazio invisibile
+        logoTextInput.value = ' '; // Spazio singolo
+        logoTextInput.disabled = true;
+        logoTextInput.style.opacity = '0.5';
+      } else {
+        logoTextInput.value = 'Business Card';
+        logoTextInput.disabled = false;
+        logoTextInput.style.opacity = '1';
+      }
+    }
 
     // Gestione upload logo
     document.getElementById('logoInput').addEventListener('change', async (e) => {
@@ -252,6 +274,8 @@
         email: document.getElementById('email').value,
         website: document.getElementById('website').value,
         brandColor: document.getElementById('brandColor').value,
+        labelColor: document.getElementById('labelColor').value,
+        foregroundColor: document.getElementById('foregroundColor').value,
         logoText: document.getElementById('logoText').value,
         phones: phones,
         addresses: addresses,
