@@ -500,8 +500,6 @@ app.post('/create-pass', async (req, res) => {
     });
 
     console.log('🎨 LogoText impostato:', logoPath ? '(nascosto - logo presente)' : (logoText || 'Business Card'));
-      serialNumber: uuidv4(),
-      backgroundColor: hexToRgbCss(brandColor),
       labelColor: 'rgb(255,255,255)',
       foregroundColor: 'rgb(255,255,255)',
       logoText
