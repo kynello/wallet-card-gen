@@ -206,18 +206,19 @@ async function processCompanyLogo(logoPath, outputDir) {
       .png()
       .toFile(path.join(outputDir, 'icon@2x.png'));
 
-    // Genera logo.png (160x50) e logo@2x.png (320x100)
+    // Genera logo GRANDE: logo.png (480x150) e logo@2x.png (960x300)
+    // Usa dimensioni maggiorate per renderlo più visibile
     await sharp(logoPath)
-      .resize(160, 50, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(480, 150, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo.png'));
     
     await sharp(logoPath)
-      .resize(320, 100, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(960, 300, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo@2x.png'));
 
-    console.log('✅ Logo processato per Apple Wallet');
+    console.log('✅ Logo processato per Apple Wallet (dimensioni: 480x150 / 960x300)');
     return true;
   } catch (e) {
     console.error('❌ Errore processamento logo:', e.message);
@@ -489,6 +490,17 @@ app.post('/create-pass', async (req, res) => {
       formatVersion: 1,
       description: 'Business Card',
       organizationName: company,
+      teamIdentifier: APPLE.teamIdentifier,
+      passTypeIdentifier: APPLE.passTypeIdentifier,
+      serialNumber: uuidv4(),
+      backgroundColor: hexToRgbCss(brandColor),
+      labelColor: 'rgb(255,255,255)',
+      foregroundColor: 'rgb(255,255,255)',
+      // Se c'è un logo caricato, non mostrare logoText, altrimenti mostralo
+      logoText: logoPath ? '' : (logoText || 'Business Card')
+    });
+
+    console.log('🎨 LogoText impostato:', logoPath ? '(nascosto - logo presente)' : (logoText || 'Business Card'));
       teamIdentifier: APPLE.teamIdentifier,
       passTypeIdentifier: APPLE.passTypeIdentifier,
       serialNumber: uuidv4(),
