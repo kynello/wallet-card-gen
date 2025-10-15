@@ -476,7 +476,8 @@ app.post('/create-pass', async (req, res) => {
       signerKey: fs.readFileSync(SIGNER_KEY_PATH),
     };
 
-    console.log('🔲 Creazione pass...');
+    console.log('🔲 Creazione pass con barcode vCard...');
+    console.log('   vCard length:', vCard.length);
 
     const pass = new PKPass({}, certificates, {
       formatVersion: 1,
@@ -491,22 +492,37 @@ app.post('/create-pass', async (req, res) => {
       logoText
     });
 
-    // Imposta tipo PRIMA di tutto
-    pass.type = 'generic';
+    // Imposta il barcode DOPO la creazione ma PRIMA dei campi
+    console.log('🔲 Impostazione barcode...');
     
-    // Imposta barcode SUBITO dopo, prima dei campi
-    console.log('🔲 Impostazione barcode con setBarcodes([])...');
-    console.log('   vCard length:', vCard.length);
-    
-    pass.setBarcodes([{
-      format: 'PKBarcodeFormatQR',
+    // Prova metodo 1: proprietà diretta
+    pass.barcode = {
       message: vCard,
+      format: 'PKBarcodeFormatQR',
       messageEncoding: 'iso-8859-1'
-    }]);
+    };
+    pass.barcodes = [{
+      message: vCard,
+      format: 'PKBarcodeFormatQR',
+      messageEncoding: 'iso-8859-1'
+    }];
     
-    console.log('🔲 Barcode check:', pass.barcodes ? pass.barcodes.length : 0);
-
-    // NON modificare più il barcode dopo questo punto!
+    console.log('🔲 Barcode dopo set proprietà:', pass.barcode ? '✓' : '✗');
+    
+    // Se non funziona, prova metodo 2: setBarcodes
+    if (!pass.barcode) {
+      console.log('⚠️ Tentativo con setBarcodes()...');
+      try {
+        pass.setBarcodes({
+          message: vCard,
+          format: 'PKBarcodeFormatQR',
+          messageEncoding: 'iso-8859-1'
+        });
+        console.log('✅ setBarcodes() eseguito');
+      } catch (e) {
+        console.error('❌ setBarcodes() fallito:', e.message);
+      }
+    }
 
     // Campi del pass
     pass.type = 'generic';
