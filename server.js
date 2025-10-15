@@ -151,8 +151,8 @@ function generateVCard(data) {
   const lines = [
     'BEGIN:VCARD',
     'VERSION:3.0',
-    `N:${lastName};${firstName};;;`,  // Cognome;Nome;Middle;Prefix;Suffix
-    `FN:${data.name}`,                 // Full Name
+    `N:${lastName};${firstName};;;`,
+    `FN:${data.name}`,
     `ORG:${data.company}`,
     `TITLE:${data.role}`
   ];
@@ -176,7 +176,6 @@ function generateVCard(data) {
   if (data.addresses && Array.isArray(data.addresses)) {
     data.addresses.forEach(addr => {
       if (addr.street || addr.city || addr.zip || addr.country) {
-        // Formato: ADR;TYPE=WORK:;;street;city;state;zip;country
         const adrLine = `ADR;TYPE=${addr.type || 'WORK'}:;;${addr.street || ''};${addr.city || ''};${addr.state || ''};${addr.zip || ''};${addr.country || ''}`;
         lines.push(adrLine);
       }
