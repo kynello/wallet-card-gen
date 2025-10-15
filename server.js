@@ -509,6 +509,7 @@ app.post('/create-pass', async (req, res) => {
     // NON modificare più il barcode dopo questo punto!
 
     // Campi del pass
+    pass.type = 'generic';
     pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
     pass.secondaryFields.push(
       { key: 'role', label: 'RUOLO', value: String(role) },
