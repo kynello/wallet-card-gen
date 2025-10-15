@@ -143,10 +143,16 @@ function hexToRgbCss(hex) {
 // ──────────────────────────────────────────────────────────────
 // Helper: genera vCard con supporto multiplo per telefoni e indirizzi
 function generateVCard(data) {
+  // Separa nome e cognome per il campo N
+  const nameParts = (data.name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+  
   const lines = [
     'BEGIN:VCARD',
     'VERSION:3.0',
-    `FN:${data.name}`,
+    `N:${lastName};${firstName};;;`,  // Cognome;Nome;Middle;Prefix;Suffix
+    `FN:${data.name}`,                 // Full Name
     `ORG:${data.company}`,
     `TITLE:${data.role}`
   ];
