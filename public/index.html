@@ -6,69 +6,281 @@
   <title>Generatore Biglietto da Visita Digitale</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 820px; margin: 24px auto; padding: 0 16px; }
-    label { display:block; margin: 12px 0 4px; }
-    input, button { width:100%; padding:10px; }
+    label { display:block; margin: 12px 0 4px; font-weight: 500; }
+    input, button, select { width:100%; padding:10px; box-sizing: border-box; }
     .row { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .row-3 { display:grid; grid-template-columns: 120px 1fr auto; gap:8px; align-items: end; }
     .actions { margin-top:16px; display:flex; gap:12px; flex-wrap: wrap; }
-    .card { border:1px solid #e5e5e5; border-radius:12px; padding:16px; margin-top:24px; }
+    .card { border:1px solid #e5e5e5; border-radius:12px; padding:16px; margin-top:24px; background: #fafafa; }
     img { max-width:100%; }
-    .hint { color:#666; font-size: 14px; }
+    .hint { color:#666; font-size: 14px; margin-top: 4px; }
     .ok { color:#0a7f2e; }
     .err { color:#b00020; }
-    a.button, button { background:#111; color:#fff; border:none; border-radius:8px; text-decoration:none; text-align:center; }
+    a.button, button { background:#111; color:#fff; border:none; border-radius:8px; text-decoration:none; text-align:center; cursor: pointer; }
     a.button { padding:10px 14px; display:inline-block; }
+    button:hover, a.button:hover { background: #333; }
+    .btn-secondary { background: #666; }
+    .btn-secondary:hover { background: #888; }
+    .btn-danger { background: #d32f2f; font-size: 14px; padding: 8px 12px; width: auto; }
+    .btn-danger:hover { background: #f44336; }
+    .multi-item { background: #fff; padding: 12px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #ddd; }
+    .logo-preview { max-width: 150px; margin-top: 8px; border: 1px solid #ddd; border-radius: 4px; }
+    .section-title { font-size: 18px; font-weight: 600; margin-top: 24px; margin-bottom: 8px; border-bottom: 2px solid #111; padding-bottom: 4px; }
+    #logoFileName { color: #0a7f2e; font-size: 14px; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <h1>Genera biglietto da visita</h1>
-  <div class="hint">Compila i campi e premi “Genera”. Otterrai i pulsanti per aggiungere il pass su iPhone e Android.</div>
+  <h1>🎴 Genera biglietto da visita digitale</h1>
+  <div class="hint">Compila i campi e premi "Genera". Otterrai i pulsanti per aggiungere il pass su iPhone e Android.</div>
+  
   <form id="cardForm" class="card">
-    <label>Nome Cognome</label><input name="name" required/>
-    <label>Ruolo</label><input name="role" required/>
-    <label>Azienda</label><input name="company" required/>
+    <!-- Logo aziendale -->
+    <div class="section-title">🏢 Logo Aziendale</div>
+    <label>Carica logo (opzionale)</label>
+    <input type="file" id="logoInput" accept="image/*"/>
+    <div class="hint">PNG o JPG, preferibilmente quadrato. Verrà ridimensionato automaticamente.</div>
+    <div id="logoFileName"></div>
+    <img id="logoPreview" class="logo-preview" style="display:none;"/>
+
+    <!-- Dati base -->
+    <div class="section-title">👤 Informazioni Base</div>
+    <label>Nome Cognome *</label>
+    <input name="name" id="name" required/>
+    
+    <label>Ruolo *</label>
+    <input name="role" id="role" required/>
+    
+    <label>Azienda *</label>
+    <input name="company" id="company" required/>
+    
+    <label>Email *</label>
+    <input name="email" id="email" type="email" required/>
+    
+    <label>Sito Web</label>
+    <input name="website" id="website" placeholder="https://..."/>
+
+    <!-- Telefoni multipli -->
+    <div class="section-title">📞 Numeri di Telefono</div>
+    <div class="hint">Aggiungi uno o più numeri (cellulare, ufficio, fax, ecc.)</div>
+    <div id="phonesContainer"></div>
+    <button type="button" class="btn-secondary" onclick="addPhone()">+ Aggiungi Telefono</button>
+
+    <!-- Indirizzi multipli -->
+    <div class="section-title">📍 Indirizzi</div>
+    <div class="hint">Aggiungi uno o più indirizzi (opzionale)</div>
+    <div id="addressesContainer"></div>
+    <button type="button" class="btn-secondary" onclick="addAddress()">+ Aggiungi Indirizzo</button>
+
+    <!-- Personalizzazione -->
+    <div class="section-title">🎨 Personalizzazione</div>
     <div class="row">
-      <div><label>Telefono</label><input name="phone" required/></div>
-      <div><label>Email</label><input name="email" type="email" required/></div>
+      <div>
+        <label>Colore brand (hex)</label>
+        <input name="brandColor" id="brandColor" value="#2B2B2B"/>
+      </div>
+      <div>
+        <label>Testo logo (sul pass)</label>
+        <input name="logoText" id="logoText" value="Business Card"/>
+      </div>
     </div>
-    <label>Sito / Link</label><input name="website" placeholder="https://..."/>
-    <label>Colore brand (hex)</label><input name="brandColor" value="#2B2B2B"/>
-    <label>Testo logo (sul pass)</label><input name="logoText" value="Business Card"/>
+
     <div class="actions">
-      <button type="submit">Genera</button>
+      <button type="submit">🚀 Genera Pass</button>
     </div>
   </form>
 
   <div id="result"></div>
 
   <script>
+    let uploadedLogoPath = null;
+    let phoneCount = 0;
+    let addressCount = 0;
+
+    // Gestione upload logo
+    document.getElementById('logoInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('logo', file);
+
+      document.getElementById('logoFileName').innerHTML = '<span style="color:#666">Caricamento...</span>';
+
+      try {
+        const res = await fetch('/upload-logo', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          uploadedLogoPath = data.logoPath;
+          document.getElementById('logoFileName').innerHTML = `✅ ${file.name}`;
+          
+          // Mostra anteprima
+          const preview = document.getElementById('logoPreview');
+          preview.src = data.logoUrl;
+          preview.style.display = 'block';
+        } else {
+          document.getElementById('logoFileName').innerHTML = `<span class="err">Errore: ${data.error}</span>`;
+        }
+      } catch (err) {
+        document.getElementById('logoFileName').innerHTML = `<span class="err">Errore upload: ${err.message}</span>`;
+      }
+    });
+
+    // Aggiungi campo telefono
+    function addPhone() {
+      phoneCount++;
+      const container = document.getElementById('phonesContainer');
+      const div = document.createElement('div');
+      div.className = 'multi-item';
+      div.innerHTML = `
+        <div class="row-3">
+          <select class="phone-type-${phoneCount}">
+            <option value="Cellulare">Cellulare</option>
+            <option value="Ufficio">Ufficio</option>
+            <option value="Casa">Casa</option>
+            <option value="Fax">Fax</option>
+            <option value="Altro">Altro</option>
+          </select>
+          <input type="tel" class="phone-number-${phoneCount}" placeholder="+39 123 4567890" required/>
+          <button type="button" class="btn-danger" onclick="this.parentElement.parentElement.remove()">✕</button>
+        </div>
+      `;
+      container.appendChild(div);
+    }
+
+    // Aggiungi campo indirizzo
+    function addAddress() {
+      addressCount++;
+      const container = document.getElementById('addressesContainer');
+      const div = document.createElement('div');
+      div.className = 'multi-item';
+      div.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <select class="address-type-${addressCount}" style="width:150px;">
+            <option value="Sede">Sede</option>
+            <option value="Ufficio">Ufficio</option>
+            <option value="Casa">Casa</option>
+            <option value="Altro">Altro</option>
+          </select>
+          <button type="button" class="btn-danger" onclick="this.parentElement.parentElement.parentElement.remove()">✕</button>
+        </div>
+        <input type="text" class="address-street-${addressCount}" placeholder="Via/Piazza e numero civico" style="margin-bottom:8px;"/>
+        <div class="row" style="margin-bottom:8px;">
+          <input type="text" class="address-city-${addressCount}" placeholder="Città"/>
+          <input type="text" class="address-zip-${addressCount}" placeholder="CAP"/>
+        </div>
+        <div class="row">
+          <input type="text" class="address-state-${addressCount}" placeholder="Provincia (opz.)"/>
+          <input type="text" class="address-country-${addressCount}" placeholder="Nazione" value="Italia"/>
+        </div>
+      `;
+      container.appendChild(div);
+    }
+
+    // Aggiungi almeno un telefono all'inizio
+    addPhone();
+
+    // Gestione submit form
     const form = document.getElementById('cardForm');
     const result = document.getElementById('result');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      result.innerHTML = "<p>Generazione in corso...</p>";
-      const data = Object.fromEntries(new FormData(form).entries());
-      const res = await fetch('/create-pass', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-      });
-      const out = await res.json();
-      if (out.error) {
-        result.innerHTML = "<p class='err'>" + out.error + "</p>";
-      } else {
-        result.innerHTML = `
-          <div class="card">
-            <p class="ok"><strong>Pass generato!</strong></p>
-            <p><strong>QR (anteprima):</strong></p>
-            <img src="${out.qrDataUrl}" alt="QR" style="width:180px;height:180px;"/>
-            <div class="actions">
-              <a class="button" href="${out.iosDownloadUrl}">Aggiungi ad Apple Wallet</a>
-              <a class="button" href="${out.androidSaveUrl}" target="_blank" rel="noopener">Save to Google Wallet</a>
+      result.innerHTML = "<div class='card'><p>⏳ Generazione in corso...</p></div>";
+
+      // Raccogli telefoni
+      const phones = [];
+      for (let i = 1; i <= phoneCount; i++) {
+        const typeEl = document.querySelector(`.phone-type-${i}`);
+        const numberEl = document.querySelector(`.phone-number-${i}`);
+        if (typeEl && numberEl && numberEl.value) {
+          phones.push({
+            type: typeEl.value,
+            number: numberEl.value
+          });
+        }
+      }
+
+      // Raccogli indirizzi
+      const addresses = [];
+      for (let i = 1; i <= addressCount; i++) {
+        const typeEl = document.querySelector(`.address-type-${i}`);
+        const streetEl = document.querySelector(`.address-street-${i}`);
+        const cityEl = document.querySelector(`.address-city-${i}`);
+        const zipEl = document.querySelector(`.address-zip-${i}`);
+        const stateEl = document.querySelector(`.address-state-${i}`);
+        const countryEl = document.querySelector(`.address-country-${i}`);
+        
+        if (typeEl && (streetEl?.value || cityEl?.value)) {
+          addresses.push({
+            type: typeEl.value,
+            street: streetEl.value,
+            city: cityEl.value,
+            zip: zipEl.value,
+            state: stateEl.value,
+            country: countryEl.value
+          });
+        }
+      }
+
+      // Verifica almeno un telefono
+      if (phones.length === 0) {
+        result.innerHTML = "<div class='card'><p class='err'>⚠️ Aggiungi almeno un numero di telefono!</p></div>";
+        return;
+      }
+
+      const data = {
+        name: document.getElementById('name').value,
+        role: document.getElementById('role').value,
+        company: document.getElementById('company').value,
+        email: document.getElementById('email').value,
+        website: document.getElementById('website').value,
+        brandColor: document.getElementById('brandColor').value,
+        logoText: document.getElementById('logoText').value,
+        phones: phones,
+        addresses: addresses,
+        logoPath: uploadedLogoPath
+      };
+
+      console.log('Invio dati:', data);
+
+      try {
+        const res = await fetch('/create-pass', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(data)
+        });
+        const out = await res.json();
+        
+        if (out.error) {
+          result.innerHTML = `<div class="card"><p class='err'>❌ ${out.error}</p></div>`;
+        } else {
+          let androidButton = '';
+          if (out.androidSaveUrl) {
+            androidButton = `<a class="button" href="${out.androidSaveUrl}" target="_blank" rel="noopener">📱 Save to Google Wallet</a>`;
+          } else if (out.androidError) {
+            androidButton = `<p class="hint">⚠️ Google Wallet: ${out.androidError}</p>`;
+          }
+
+          result.innerHTML = `
+            <div class="card">
+              <p class="ok"><strong>✅ Pass generato con successo!</strong></p>
+              <p><strong>QR Code (anteprima):</strong></p>
+              <img src="${out.qrDataUrl}" alt="QR" style="width:180px;height:180px; border: 2px solid #ddd; border-radius: 8px;"/>
+              <p class="hint">Scansiona il QR per salvare il contatto nella rubrica</p>
+              <div class="actions">
+                <a class="button" href="${out.iosDownloadUrl}">🍎 Aggiungi ad Apple Wallet</a>
+                ${androidButton}
+              </div>
+              <p class="hint">💡 Se il pulsante iOS non apre automaticamente Wallet, scarica il file e aprilo manualmente.</p>
             </div>
-            <p class="hint">Se il pulsante iOS non apre il Wallet, scarica il file e aprilo con Wallet.</p>
-          </div>
-        `;
+          `;
+        }
+      } catch (err) {
+        result.innerHTML = `<div class="card"><p class='err'>❌ Errore di rete: ${err.message}</p></div>`;
       }
     });
   </script>
