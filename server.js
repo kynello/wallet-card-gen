@@ -439,14 +439,16 @@ app.post('/upload-logo', upload.single('logo'), async (req, res) => {
 // Crea pass per entrambe le piattaforme
 app.post('/create-pass', async (req, res) => {
   try {
-    const {
-      name, role, company, email, website,
-      phones = [],        // Array di {type, number}
-      addresses = [],     // Array di {type, street, city, zip, state, country}
-      logoPath,           // Nome file logo caricato (opzionale)
-      brandColor = '#202020', 
-      logoText = 'Business Card'
-    } = req.body || {};
+const {
+  name, role, company, email, website,
+  phones = [],
+  addresses = [],
+  logoPath,
+  brandColor = '#202020',
+  labelColor = '#FFFFFF',
+  foregroundColor = '#FFFFFF',
+  logoText = 'Business Card'
+} = req.body || {};
 
     console.log('📝 Richiesta creazione pass per:', name);
     console.log('📞 Telefoni:', phones);
@@ -493,8 +495,8 @@ app.post('/create-pass', async (req, res) => {
       passTypeIdentifier: APPLE.passTypeIdentifier,
       serialNumber: uuidv4(),
       backgroundColor: hexToRgbCss(brandColor),
-      labelColor: 'rgb(255,255,255)',
-      foregroundColor: 'rgb(255,255,255)',
+      labelColor: hexToRgbCss(labelColor),
+      foregroundColor: hexToRgbCss(foregroundColor),
       logoText
     });
 
