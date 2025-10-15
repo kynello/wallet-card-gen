@@ -457,8 +457,9 @@ app.post('/create-pass', async (req, res) => {
     }
 
     // Genera vCard con tutti i dati
+    console.log('📇 Dati per vCard:', { name, role, company, email, website });
     const vCard = generateVCard({ name, role, company, email, website, phones, addresses });
-    console.log('📇 vCard generato:', vCard.substring(0, 100) + '...');
+    console.log('📇 vCard generato:', vCard.substring(0, 150) + '...');
 
     const qrDataUrl = await QRCode.toDataURL(vCard);
 
