@@ -208,12 +208,12 @@ async function processCompanyLogo(logoPath, outputDir) {
 
     // Logo standard Apple Wallet: logo.png (160x50) e logo@2x.png (320x100)
     await sharp(logoPath)
-      .resize(240, 75, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(160, 50, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo.png'));
     
     await sharp(logoPath)
-      .resize(480, 150, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(320, 100, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo@2x.png'));
 
