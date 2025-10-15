@@ -483,20 +483,61 @@ app.post('/create-pass', async (req, res) => {
       signerKey: fs.readFileSync(SIGNER_KEY_PATH),
     };
 
-    console.log('🔲 Creazione pass...');
+console.log('🔲 Creazione pass...');
 
-    const pass = new PKPass({}, certificates, {
-      formatVersion: 1,
-      description: 'Business Card',
-      organizationName: company,
-      teamIdentifier: APPLE.teamIdentifier,
-      passTypeIdentifier: APPLE.passTypeIdentifier,
-      serialNumber: uuidv4(),
-      backgroundColor: hexToRgbCss(brandColor),
-      labelColor: 'rgb(255,255,255)',
-      foregroundColor: 'rgb(255,255,255)',
-      logoText
-    });
+// Configurazione base del pass
+const passConfig = {
+  formatVersion: 1,
+  description: 'Business Card',
+  organizationName: company,
+  teamIdentifier: APPLE.teamIdentifier,
+  passTypeIdentifier: APPLE.passTypeIdentifier,
+  serialNumber: uuidv4(),
+  backgroundColor: hexToRgbCss(brandColor),
+  labelColor: 'rgb(255,255,255)',
+  foregroundColor: 'rgb(255,255,255)'
+};
+
+// NON aggiungere logoText - così non appare
+// Se vuoi comunque darlo come opzione all'utente:
+if (logoText && logoText.trim() && !logoPath) {
+  passConfig.logoText = logoText;
+  console.log('🎨 LogoText:', logoText);
+} else {
+  console.log('🎨 LogoText omesso (solo logo visibile)');
+}
+
+const pass = new PKPass({}, certificates, passConfig);// Helper: processa logo aziendale per Apple Wallet (icona e logo)
+async function processCompanyLogo(logoPath, outputDir) {
+  try {
+    // Genera icon.png (29x29) e icon@2x.png (58x58)
+    await sharp(logoPath)
+      .resize(29, 29, { fit: 'cover' })
+      .png()
+      .toFile(path.join(outputDir, 'icon.png'));
+    
+    await sharp(logoPath)
+      .resize(58, 58, { fit: 'cover' })
+      .png()
+      .toFile(path.join(outputDir, 'icon@2x.png'));
+
+    // Genera logo PIÙ GRANDE: logo.png (480x150) e logo@2x.png (960x300)
+    await sharp(logoPath)
+      .resize(480, 150, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(path.join(outputDir, 'logo.png'));
+    
+    await sharp(logoPath)
+      .resize(960, 300, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(path.join(outputDir, 'logo@2x.png'));
+
+    console.log('✅ Logo processato per Apple Wallet (480x150 / 960x300)');
+    return true;
+  } catch (e) {
+    console.error('❌ Errore processamento logo:', e.message);
+    return false;
+  }
 
     console.log('🔍 Pass object keys:', Object.keys(pass));
     console.log('🔍 Pass prototype:', Object.getPrototypeOf(pass).constructor.name);
