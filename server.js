@@ -499,15 +499,6 @@ app.post('/create-pass', async (req, res) => {
       logoText: logoPath ? '' : (logoText || 'Business Card')
     });
 
-    console.log('🎨 LogoText impostato:', logoPath ? '(nascosto - logo presente)' : (logoText || 'Business Card'));
-      labelColor: 'rgb(255,255,255)',
-      foregroundColor: 'rgb(255,255,255)',
-      logoText
-    });
-
-    console.log('🔍 Pass object keys:', Object.keys(pass));
-    console.log('🔍 Pass prototype:', Object.getPrototypeOf(pass).constructor.name);
-    console.log('🔍 setBarcodes exists?', typeof pass.setBarcodes);
     
     // Imposta tipo PRIMA di tutto
     pass.type = 'generic';
