@@ -489,18 +489,40 @@ app.post('/create-pass', async (req, res) => {
       backgroundColor: hexToRgbCss(brandColor),
       labelColor: 'rgb(255,255,255)',
       foregroundColor: 'rgb(255,255,255)',
-      logoText,
-      barcode: {
-        message: vCard,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
-      },
-      barcodes: [{
-        message: vCard,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
-      }]
+      logoText
     });
+
+    // Imposta il barcode DOPO la creazione ma PRIMA dei campi
+    console.log('🔲 Impostazione barcode...');
+    
+    // Prova metodo 1: proprietà diretta
+    pass.barcode = {
+      message: vCard,
+      format: 'PKBarcodeFormatQR',
+      messageEncoding: 'iso-8859-1'
+    };
+    pass.barcodes = [{
+      message: vCard,
+      format: 'PKBarcodeFormatQR',
+      messageEncoding: 'iso-8859-1'
+    }];
+    
+    console.log('🔲 Barcode dopo set proprietà:', pass.barcode ? '✓' : '✗');
+    
+    // Se non funziona, prova metodo 2: setBarcodes
+    if (!pass.barcode) {
+      console.log('⚠️ Tentativo con setBarcodes()...');
+      try {
+        pass.setBarcodes({
+          message: vCard,
+          format: 'PKBarcodeFormatQR',
+          messageEncoding: 'iso-8859-1'
+        });
+        console.log('✅ setBarcodes() eseguito');
+      } catch (e) {
+        console.error('❌ setBarcodes() fallito:', e.message);
+      }
+    }
 
     // Campi del pass
     pass.type = 'generic';
