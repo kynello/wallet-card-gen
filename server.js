@@ -476,8 +476,7 @@ app.post('/create-pass', async (req, res) => {
       signerKey: fs.readFileSync(SIGNER_KEY_PATH),
     };
 
-    console.log('🔲 Creazione pass con barcode vCard...');
-    console.log('   vCard length:', vCard.length);
+    console.log('🔲 Creazione pass...');
 
     const pass = new PKPass({}, certificates, {
       formatVersion: 1,
@@ -489,24 +488,27 @@ app.post('/create-pass', async (req, res) => {
       backgroundColor: hexToRgbCss(brandColor),
       labelColor: 'rgb(255,255,255)',
       foregroundColor: 'rgb(255,255,255)',
-      logoText,
-      // Barcode impostato QUI e NON toccato più
-      barcode: {
-        message: vCard,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
-      },
-      barcodes: [{
-        message: vCard,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
-      }]
+      logoText
     });
+
+    // Imposta tipo PRIMA di tutto
+    pass.type = 'generic';
+    
+    // Imposta barcode SUBITO dopo, prima dei campi
+    console.log('🔲 Impostazione barcode con setBarcodes([])...');
+    console.log('   vCard length:', vCard.length);
+    
+    pass.setBarcodes([{
+      format: 'PKBarcodeFormatQR',
+      message: vCard,
+      messageEncoding: 'iso-8859-1'
+    }]);
+    
+    console.log('🔲 Barcode check:', pass.barcodes ? pass.barcodes.length : 0);
 
     // NON modificare più il barcode dopo questo punto!
 
     // Campi del pass
-    pass.type = 'generic';
     pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
     pass.secondaryFields.push(
       { key: 'role', label: 'RUOLO', value: String(role) },
