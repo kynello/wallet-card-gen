@@ -458,7 +458,7 @@ app.post('/create-pass', async (req, res) => {
 
     // Genera vCard con tutti i dati
     const vCard = generateVCard({ name, role, company, email, website, phones, addresses });
-    console.log('📇 vCard generato');
+    console.log('📇 vCard generato:', vCard.substring(0, 100) + '...');
 
     const qrDataUrl = await QRCode.toDataURL(vCard);
 
@@ -475,6 +475,9 @@ app.post('/create-pass', async (req, res) => {
       signerCert: fs.readFileSync(SIGNER_CERT_PATH),
       signerKey: fs.readFileSync(SIGNER_KEY_PATH),
     };
+
+    console.log('🔲 Creazione pass con barcode vCard...');
+    console.log('   vCard length:', vCard.length);
 
     const pass = new PKPass({}, certificates, {
       formatVersion: 1,
@@ -584,6 +587,8 @@ app.post('/create-pass', async (req, res) => {
     }
 
     console.log('✅ Pass configurato completamente');
+    console.log('🔲 Barcode nel pass:', pass.barcode ? '✓' : '✗');
+    console.log('🔲 Barcodes array:', pass.barcodes ? pass.barcodes.length : 0);
 
     const outfile = path.join(passesDir, `${fileId}.pkpass`);
     const buf = await pass.getAsBuffer();
