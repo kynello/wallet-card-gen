@@ -206,18 +206,18 @@ async function processCompanyLogo(logoPath, outputDir) {
       .png()
       .toFile(path.join(outputDir, 'icon@2x.png'));
 
-    // Genera logo.png (160x50) e logo@2x.png (320x100)
+    // Genera logo PIÙ GRANDE: logo.png (480x150) e logo@2x.png (960x300)
     await sharp(logoPath)
-      .resize(160, 50, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(480, 150, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo.png'));
     
     await sharp(logoPath)
-      .resize(320, 100, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(960, 300, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo@2x.png'));
 
-    console.log('✅ Logo processato per Apple Wallet');
+    console.log('✅ Logo processato per Apple Wallet (480x150 / 960x300)');
     return true;
   } catch (e) {
     console.error('❌ Errore processamento logo:', e.message);
