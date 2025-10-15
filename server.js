@@ -505,12 +505,14 @@ app.post('/create-pass', async (req, res) => {
     console.log('   vCard primi 50 char:', vCard.substring(0, 50));
     
     try {
-      console.log('   Chiamata setBarcodes con array...');
-      const result = pass.setBarcodes([{
-        format: 'PKBarcodeFormatQR',
+      console.log('   Chiamata setBarcodes con formato corretto...');
+      // La libreria vuole "value" come oggetto, non stringa diretta
+      const result = pass.setBarcodes({
         message: vCard,
-        messageEncoding: 'iso-8859-1'
-      }]);
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1',
+        altText: 'Scansiona per salvare il contatto'
+      });
       console.log('   setBarcodes return value:', result);
       console.log('   setBarcodes completato senza errori');
     } catch (e) {
@@ -579,6 +581,19 @@ app.post('/create-pass', async (req, res) => {
       value: 'Scansiona il codice QR per salvare il contatto nella rubrica' 
     });
 
+    // ULTIMO TENTATIVO: Imposta barcode DOPO tutti i campi
+    console.log('🔲 Impostazione barcode DOPO i campi...');
+    try {
+      pass.setBarcodes({
+        message: vCard,
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1'
+      });
+      console.log('✅ Barcode impostato dopo i campi');
+    } catch (e) {
+      console.error('❌ Errore barcode dopo campi:', e.message);
+    }
+
     // Processa logo aziendale se fornito
     const fileId = uuidv4();
     const tempLogoDir = path.join(uploadsDir, `temp-${fileId}`);
@@ -614,8 +629,14 @@ app.post('/create-pass', async (req, res) => {
     }
 
     console.log('✅ Pass configurato completamente');
-    console.log('🔲 Barcode nel pass:', pass.barcode ? '✓' : '✗');
-    console.log('🔲 Barcodes array:', pass.barcodes ? pass.barcodes.length : 0);
+    console.log('🔲 FINAL CHECK - Barcode nel pass:');
+    console.log('   pass.barcode:', pass.barcode ? 'EXISTS' : 'NULL');
+    console.log('   pass.barcodes:', pass.barcodes ? `ARRAY [${pass.barcodes.length}]` : 'NULL');
+    
+    if (pass.barcodes && pass.barcodes.length > 0) {
+      console.log('   First barcode format:', pass.barcodes[0].format);
+      console.log('   First barcode message length:', pass.barcodes[0].message.length);
+    }
 
     const outfile = path.join(passesDir, `${fileId}.pkpass`);
     const buf = await pass.getAsBuffer();
