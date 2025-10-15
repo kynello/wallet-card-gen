@@ -151,8 +151,8 @@ function generateVCard(data) {
   const lines = [
     'BEGIN:VCARD',
     'VERSION:3.0',
-    `N:${lastName};${firstName};;;`,
-    `FN:${data.name}`,
+    `N:${lastName};${firstName};;;`,  // Cognome;Nome;Middle;Prefix;Suffix
+    `FN:${data.name}`,                 // Full Name
     `ORG:${data.company}`,
     `TITLE:${data.role}`
   ];
@@ -176,6 +176,7 @@ function generateVCard(data) {
   if (data.addresses && Array.isArray(data.addresses)) {
     data.addresses.forEach(addr => {
       if (addr.street || addr.city || addr.zip || addr.country) {
+        // Formato: ADR;TYPE=WORK:;;street;city;state;zip;country
         const adrLine = `ADR;TYPE=${addr.type || 'WORK'}:;;${addr.street || ''};${addr.city || ''};${addr.state || ''};${addr.zip || ''};${addr.country || ''}`;
         lines.push(adrLine);
       }
@@ -205,19 +206,18 @@ async function processCompanyLogo(logoPath, outputDir) {
       .png()
       .toFile(path.join(outputDir, 'icon@2x.png'));
 
-    // Genera logo GRANDE: logo.png (480x150) e logo@2x.png (960x300)
-    // Usa dimensioni maggiorate per renderlo più visibile
+    // Genera logo.png (160x50) e logo@2x.png (320x100)
     await sharp(logoPath)
-      .resize(480, 150, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(160, 50, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo.png'));
     
     await sharp(logoPath)
-      .resize(960, 300, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(320, 100, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(path.join(outputDir, 'logo@2x.png'));
 
-    console.log('✅ Logo processato per Apple Wallet (dimensioni: 480x150 / 960x300)');
+    console.log('✅ Logo processato per Apple Wallet');
     return true;
   } catch (e) {
     console.error('❌ Errore processamento logo:', e.message);
@@ -495,11 +495,12 @@ app.post('/create-pass', async (req, res) => {
       backgroundColor: hexToRgbCss(brandColor),
       labelColor: 'rgb(255,255,255)',
       foregroundColor: 'rgb(255,255,255)',
-      // Se c'è un logo caricato, non mostrare logoText, altrimenti mostralo
-      logoText: logoPath ? '' : (logoText || 'Business Card')
+      logoText
     });
 
-
+    console.log('🔍 Pass object keys:', Object.keys(pass));
+    console.log('🔍 Pass prototype:', Object.getPrototypeOf(pass).constructor.name);
+    console.log('🔍 setBarcodes exists?', typeof pass.setBarcodes);
     
     // Imposta tipo PRIMA di tutto
     pass.type = 'generic';
