@@ -38,7 +38,7 @@
     <div class="section-title">🏢 Logo Aziendale</div>
     <label>Carica logo (opzionale)</label>
     <input type="file" id="logoInput" accept="image/*"/>
-    <div class="hint">PNG o JPG, preferibilmente quadrato. Verrà ridimensionato automaticamente.</div>
+    <div class="hint">PNG o JPG, preferibilmente orizzontale. Se carichi il logo, il testo "Business Card" non verrà mostrato.</div>
     <div id="logoFileName"></div>
     <img id="logoPreview" class="logo-preview" style="display:none;"/>
 
@@ -75,12 +75,25 @@
     <div class="section-title">🎨 Personalizzazione</div>
     <div class="row">
       <div>
-        <label>Colore brand (hex)</label>
-        <input name="brandColor" id="brandColor" value="#2B2B2B"/>
+        <label>Colore sfondo pass</label>
+        <input type="color" name="brandColor" id="brandColor" value="#2B2B2B"/>
       </div>
       <div>
         <label>Testo logo (sul pass)</label>
         <input name="logoText" id="logoText" value="Business Card"/>
+        <div class="hint">Usato solo se NON carichi un logo aziendale</div>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Colore etichette</label>
+        <input type="color" name="labelColor" id="labelColor" value="#FFFFFF"/>
+        <div class="hint">Colore per NOME, RUOLO, EMAIL, ecc.</div>
+      </div>
+      <div>
+        <label>Colore testi</label>
+        <input type="color" name="foregroundColor" id="foregroundColor" value="#FFFFFF"/>
+        <div class="hint">Colore per i valori (nome, azienda, ecc.)</div>
       </div>
     </div>
 
