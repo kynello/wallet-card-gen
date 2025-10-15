@@ -498,7 +498,6 @@ app.post('/create-pass', async (req, res) => {
       // Se c'è un logo caricato, non mostrare logoText, altrimenti mostralo
       logoText: logoPath ? '' : (logoText || 'Business Card')
     });
-
     
     // Imposta tipo PRIMA di tutto
     pass.type = 'generic';
