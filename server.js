@@ -508,38 +508,7 @@ const {
     pass.type = 'generic';
     console.log('✅ Type impostato:', pass.type);
     
-    // Imposta barcode SUBITO dopo, prima dei campi
-    console.log('🔲 Tentativo impostazione barcode...');
-    console.log('   vCard length:', vCard.length);
-    console.log('   vCard primi 50 char:', vCard.substring(0, 50));
     
-    try {
-      console.log('   Chiamata setBarcodes con formato corretto...');
-      // La libreria vuole "value" come oggetto, non stringa diretta
-      const result = pass.setBarcodes({
-        message: vCard,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1',
-        altText: 'Scansiona per salvare il contatto'
-      });
-      console.log('   setBarcodes return value:', result);
-      console.log('   setBarcodes completato senza errori');
-    } catch (e) {
-      console.error('❌ ERRORE setBarcodes:', e.message);
-      console.error('   Stack:', e.stack);
-    }
-    
-    console.log('🔍 Dopo setBarcodes:');
-    console.log('   pass.barcode:', pass.barcode);
-    console.log('   pass.barcodes:', pass.barcodes);
-    console.log('   pass.barcodes length:', pass.barcodes ? pass.barcodes.length : 'undefined');
-    
-    // Prova anche accesso diretto
-    console.log('🔍 Tentativo accesso interno:');
-    console.log('   pass._props:', pass._props ? Object.keys(pass._props) : 'non esiste');
-    console.log('   pass._fields:', pass._fields ? Object.keys(pass._fields) : 'non esiste');
-
-    // NON modificare più il barcode dopo questo punto!
 
     // Campi del pass
     pass.primaryFields.push({ key: 'name', label: 'NOME', value: String(name) });
